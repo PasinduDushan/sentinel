@@ -9,6 +9,8 @@ import re
 from responder import block_ip
 
 LOG_FILE = "/opt/sentinel/logs/agent.log"
+STATUS_FILE = "/opt/sentinel/update.status"
+UPDATE_MARKER_FILE = "/opt/sentinel/update.pending"
 
 def log_event(message):
     """Write to stdout and directly to the agent log file."""
@@ -21,7 +23,30 @@ def log_event(message):
     except Exception:
         pass
 
+def write_status(status, details=""):
+    """Write update/restart status for management script visibility."""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"[{ts}] {status}"
+    if details:
+        line = f"{line}: {details}"
+    try:
+        with open(STATUS_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+
+def finalize_pending_update():
+    """If previous process restarted after update, mark completion."""
+    if os.path.exists(UPDATE_MARKER_FILE):
+        write_status("UPDATE_COMPLETE", "Agent restarted with latest code")
+        log_event("[Sentinel] Update completed and agent restarted")
+        try:
+            os.remove(UPDATE_MARKER_FILE)
+        except Exception:
+            pass
+
 log_event("[Sentinel] Agent started")
+finalize_pending_update()
 
 # Command file location
 COMMAND_FILE = "/opt/sentinel/command"
@@ -48,8 +73,16 @@ def handle_restart():
 
 def handle_update():
     """Update from GitHub and restart"""
+    write_status("UPDATE_RECEIVED", "Update command accepted")
     log_event("[Sentinel] Update command received")
     try:
+        try:
+            with open(UPDATE_MARKER_FILE, "w", encoding="utf-8") as f:
+                f.write(str(time.time()))
+        except Exception:
+            pass
+
+        write_status("UPDATE_PULLING", "Pulling latest changes from GitHub")
         log_event("[Sentinel] Pulling latest from GitHub")
         # Git pull in the sentinel core directory
         result = subprocess.run(
@@ -59,14 +92,27 @@ def handle_update():
             timeout=30
         )
         if result.returncode == 0:
+            pull_summary = (result.stdout or "").strip() or "Git pull completed"
+            write_status("UPDATE_SUCCESS", pull_summary)
             log_event("[Success] Updated to latest version")
         else:
+            write_status("UPDATE_ERROR", result.stderr.strip())
             log_event(f"[Error] Update failed: {result.stderr.strip()}")
+            try:
+                os.remove(UPDATE_MARKER_FILE)
+            except Exception:
+                pass
             return
     except Exception as e:
+        write_status("UPDATE_ERROR", str(e))
         log_event(f"[Error] Update error: {e}")
+        try:
+            os.remove(UPDATE_MARKER_FILE)
+        except Exception:
+            pass
         return
     
+    write_status("UPDATE_RESTARTING", "Restarting agent to apply update")
     log_event("[Sentinel] Restarting after update")
     time.sleep(1)
     sys.exit(0)  # systemd/supervisor will restart it

@@ -46,7 +46,7 @@ def read_last_status_line():
     except Exception:
         return None
 
-def wait_for_update_status(timeout_seconds=90):
+def wait_for_update_status(timeout_seconds=180):
     """Show live update progress and return non-zero on failure/timeout."""
     print("Waiting for update progress...")
     start = time.time()

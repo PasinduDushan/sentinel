@@ -29,6 +29,16 @@ def chain_exists(chain):
     result = run_iptables(["-nL", chain])
     return result.returncode == 0
 
+def rule_exists(chain, ip):
+    return run_iptables(["-C", chain, "-s", ip, "-j", "DROP"]).returncode == 0
+
+def ip_is_blocked_in_kernel(ip):
+    if rule_exists("INPUT", ip):
+        return True
+    if chain_exists("DOCKER-USER") and rule_exists("DOCKER-USER", ip):
+        return True
+    return False
+
 def log_event(message):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{ts}] {message}"
@@ -46,7 +56,11 @@ def block_ip(ip):
         return
 
     if ip in blocked:
-        return
+        # If rules were flushed manually (e.g. iptables -F), re-apply block.
+        if ip_is_blocked_in_kernel(ip):
+            return
+        blocked.discard(ip)
+        log_event(f"[Info] Cached block for {ip} was stale; re-applying firewall rules")
 
     input_ok, input_msg = ensure_drop_rule("INPUT", ip)
 

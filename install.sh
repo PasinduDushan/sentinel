@@ -1,87 +1,127 @@
 #!/bin/bash
 
-LOG="[Sentinel Installer]"
+LOG="\033[1;36m[Sentinel Installer]\033[0m"
+INFO="\033[1;34m[INFO]\033[0m"
+SUCCESS="\033[1;32m[✓]\033[0m"
+ERROR="\033[1;31m[✗]\033[0m"
 
-echo "$LOG Detecting system environment..."
+echo -e "$LOG Detecting system environment..."
 sleep 1
 
 OS=$(uname -s)
 ARCH=$(uname -m)
-echo "$LOG OS: $OS"
-echo "$LOG Architecture: $ARCH"
+echo -e "$INFO OS: $OS"
+echo -e "$INFO Architecture: $ARCH"
 
 if [ "$EUID" -ne 0 ]; then
-  echo "$LOG Please run as root."
+  echo -e "$ERROR Please run as root."
   exit 1
 fi
 
-echo "$LOG Updating system packages..."
-apt update -y > /dev/null 2>&1
-echo "$LOG Installing dependencies..."
-apt install -y python3 python3-pip tcpdump git curl > /dev/null 2>&1
+echo -e "$LOG Updating system packages..."
+echo -e "$INFO Running: apt update -y"
+apt update -y 2>&1 | sed 's/^/    /'
+echo -e "$SUCCESS Package list updated"
 
-echo "$LOG Creating Sentinel directories..."
+echo ""
+echo -e "$LOG Installing dependencies..."
+echo -e "$INFO Installing: python3, python3-pip, tcpdump, git, curl"
+apt install -y python3 python3-pip tcpdump git curl 2>&1 | grep -E "^(Get:|Reading|Building|Setting up|Processing)"
+echo -e "$SUCCESS All dependencies installed"
+
+echo ""
+echo -e "$LOG Creating Sentinel directories..."
 mkdir -p /opt/sentinel/logs
+echo -e "$SUCCESS Directory structure created at /opt/sentinel"
 
-echo "$LOG Fetching Sentinel core from GitHub..."
+echo ""
+echo -e "$LOG Fetching Sentinel core from GitHub..."
 REPO_URL="https://github.com/PasinduDushan/sentinel.git"
+echo -e "$INFO Cloning: $REPO_URL"
 
 rm -rf /opt/sentinel/core
-git clone "$REPO_URL" /opt/sentinel/core > /dev/null 2>&1
+git clone "$REPO_URL" /opt/sentinel/core 2>&1 | sed 's/^/    /'
 if [ $? -ne 0 ]; then
-  echo "$LOG Failed to fetch repository!"
+  echo -e "$ERROR Failed to fetch repository!"
   exit 1
 fi
+echo -e "$SUCCESS Repository cloned successfully"
 
-echo "$LOG Verifying agent files..."
+echo ""
+echo -e "$LOG Verifying agent files..."
 if [ ! -f "/opt/sentinel/core/agent/agent.py" ]; then
-  echo "$LOG Agent files missing!"
+  echo -e "$ERROR Agent files missing!"
   exit 1
 fi
+echo -e "$SUCCESS Agent files verified"
 
-echo "$LOG Initializing logs..."
+echo ""
+echo -e "$LOG Initializing logs..."
 touch /opt/sentinel/logs/agent.log
+echo -e "$SUCCESS Log file initialized"
 
-echo "$LOG Setting up systemd service..."
+echo ""
+echo -e "$LOG Setting up systemd service..."
 cp /opt/sentinel/core/sentinel.service /etc/systemd/system/sentinel.service
 chmod 644 /etc/systemd/system/sentinel.service
+echo -e "$SUCCESS Systemd service configured"
 
-echo "$LOG Deploying management script..."
+echo ""
+echo -e "$LOG Deploying management script..."
 cp /opt/sentinel/core/sentinel-manage.py /opt/sentinel/sentinel-manage.py
 chmod 755 /opt/sentinel/sentinel-manage.py
+echo -e "$SUCCESS Management script deployed"
 
-echo "$LOG Registering with Sentinel Cloud..."
-sleep 1
+echo ""
+echo -e "$LOG Creating symlink for easy access..."
+ln -sf /opt/sentinel/sentinel-manage.py /usr/local/bin/sentinel-manage
+echo -e "$SUCCESS Symlink created: /usr/local/bin/sentinel-manage"
+
+echo ""
+echo -e "$LOG Registering with Sentinel Cloud..."
+for i in {1..3}; do echo -n "."; sleep 0.3; done
+echo ""
 AGENT_ID="AGT-$(openssl rand -hex 3)"
-echo "$LOG Agent ID: $AGENT_ID"
+echo -e "$SUCCESS Agent ID: $AGENT_ID"
 
-echo "$LOG Establishing secure runtime..."
-sleep 1
+echo ""
+echo -e "$LOG Establishing secure runtime..."
+for i in {1..3}; do echo -n "."; sleep 0.3; done
+echo ""
 
-echo "$LOG Starting Sentinel Agent via systemd..."
+echo ""
+echo -e "$LOG Starting Sentinel Agent via systemd..."
+echo -e "$INFO Running: systemctl daemon-reload"
 systemctl daemon-reload
-systemctl enable sentinel.service
+echo -e "$INFO Running: systemctl enable sentinel.service"
+systemctl enable sentinel.service 2>&1 | sed 's/^/    /'
+echo -e "$INFO Running: systemctl start sentinel.service"
 systemctl start sentinel.service
+echo -e "$SUCCESS Systemd service started"
 
 sleep 2
 
 # Check service status
 if systemctl is-active --quiet sentinel.service; then
-  STATUS="✅ RUNNING"
+  STATUS="\033[1;32m✅ RUNNING\033[0m"
 else
-  STATUS="❌ FAILED"
+  STATUS="\033[1;31m❌ FAILED\033[0m"
 fi
 
-echo "$LOG Sentinel Protection: ACTIVE ✅"
-echo "======================================"
-echo " Sentinel Agent Installed Successfully"
-echo " Agent ID: $AGENT_ID"
-echo " Status  : $STATUS"
-echo " Service : /etc/systemd/system/sentinel.service"
-echo " Logs    : /opt/sentinel/logs/agent.log"
-echo " Manage  : /opt/sentinel/sentinel-manage.py"
-echo ""
-echo " Management Commands:"
-echo "   sudo /opt/sentinel/sentinel-manage.py restart"
-echo "   sudo /opt/sentinel/sentinel-manage.py update"
-echo "======================================"
+echo -e "$LOG Sentinel Protection: ACTIVE ✅"
+echo -e "\033[1;36m======================================\033[0m"
+echo -e "\033[1;32m Sentinel Agent Installed Successfully\033[0m"
+echo -e "\033[0m"
+echo -e " Agent ID  : $AGENT_ID"
+echo -e " Status    : $STATUS"
+echo -e " Service   : /etc/systemd/system/sentinel.service"
+echo -e " Logs      : /opt/sentinel/logs/agent.log"
+echo -e " Manage    : /opt/sentinel/sentinel-manage.py"
+echo -e "\033[0m"
+echo -e "\033[1;33m Management Commands:\033[0m"
+echo -e "   \033[0;36msudo sentinel-manage restart\033[0m (via symlink)"
+echo -e "   \033[0;36msudo /opt/sentinel/sentinel-manage.py restart\033[0m (direct)"
+echo -e "\033[0m"
+echo -e "   \033[0;36msudo sentinel-manage update\033[0m (via symlink)"
+echo -e "   \033[0;36msudo /opt/sentinel/sentinel-manage.py update\033[0m (direct)"
+echo -e "\033[1;36m======================================\033[0m"

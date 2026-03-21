@@ -42,6 +42,14 @@ fi
 echo "$LOG Initializing logs..."
 touch /opt/sentinel/logs/agent.log
 
+echo "$LOG Setting up systemd service..."
+cp /opt/sentinel/core/sentinel.service /etc/systemd/system/sentinel.service
+chmod 644 /etc/systemd/system/sentinel.service
+
+echo "$LOG Deploying management script..."
+cp /opt/sentinel/core/sentinel-manage.py /opt/sentinel/sentinel-manage.py
+chmod 755 /opt/sentinel/sentinel-manage.py
+
 echo "$LOG Registering with Sentinel Cloud..."
 sleep 1
 AGENT_ID="AGT-$(openssl rand -hex 3)"
@@ -50,14 +58,30 @@ echo "$LOG Agent ID: $AGENT_ID"
 echo "$LOG Establishing secure runtime..."
 sleep 1
 
-echo "$LOG Starting Sentinel Agent..."
-nohup python3 /opt/sentinel/core/agent/agent.py \
-  > /opt/sentinel/logs/agent.log 2>&1 &
+echo "$LOG Starting Sentinel Agent via systemd..."
+systemctl daemon-reload
+systemctl enable sentinel.service
+systemctl start sentinel.service
 
-sleep 1
+sleep 2
+
+# Check service status
+if systemctl is-active --quiet sentinel.service; then
+  STATUS="✅ RUNNING"
+else
+  STATUS="❌ FAILED"
+fi
+
 echo "$LOG Sentinel Protection: ACTIVE ✅"
 echo "======================================"
 echo " Sentinel Agent Installed Successfully"
 echo " Agent ID: $AGENT_ID"
-echo " Status  : PROTECTED ✅"
+echo " Status  : $STATUS"
+echo " Service : /etc/systemd/system/sentinel.service"
+echo " Logs    : /opt/sentinel/logs/agent.log"
+echo " Manage  : /opt/sentinel/sentinel-manage.py"
+echo ""
+echo " Management Commands:"
+echo "   sudo /opt/sentinel/sentinel-manage.py restart"
+echo "   sudo /opt/sentinel/sentinel-manage.py update"
 echo "======================================"

@@ -1,0 +1,15 @@
+[Unit]
+Description=Sentinel DDoS Protection Agent
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 -u /opt/sentinel/core/agent/agent.py
+Restart=always
+RestartSec=10
+User=root
+StandardOutput=file:/opt/sentinel/logs/agent.log
+StandardError=file:/opt/sentinel/logs/agent.log
+
+[Install]
+WantedBy=multi-user.target

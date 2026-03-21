@@ -1,11 +1,11 @@
 import subprocess
 import time
 from collections import defaultdict
-import socket
 import requests
+import re
 from responder import block_ip
 
-print("[Sentinel] Agent started...")
+print("\033[1;36m[Sentinel] Agent started...\033[0m")
 
 # get public IP to avoid blocking ourselves
 try:
@@ -16,9 +16,15 @@ except:
 traffic = defaultdict(list)
 THRESHOLD = 30  # requests in 10s to trigger block
 
-# safer tcpdump: only TCP + port 80 (HTTP)
-cmd = ["tcpdump", "-i", "any", "-n", "-l", "tcp", "and", "port", "80"]
+def extract_ip(part):
+    """Extract a valid IPv4 from a string"""
+    match = re.search(r"(\d{1,3}\.){3}\d{1,3}", part)
+    if match:
+        return match.group(0)
+    return None
 
+# tcpdump: only TCP + port 80, line buffered
+cmd = ["tcpdump", "-i", "any", "-n", "-l", "tcp", "and", "port", "80"]
 proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
 
 while True:
@@ -29,35 +35,35 @@ while True:
 
     try:
         parts = line.split()
-        src = parts[2]  # source IP
-        ip = src.split(".")[0:4]
-        ip = ".".join(ip)
+        if len(parts) < 3:
+            continue
 
-        # skip self IPs / localhost / private ranges
-        if ip == MY_IP or ip.startswith("127.") or ip.startswith("192.168.") or ip.startswith("10."):
+        src_ip = extract_ip(parts[2])
+        if not src_ip:
+            continue  # skip invalid tokens like In/Out
+
+        # skip self / localhost / private IPs
+        if src_ip == MY_IP or src_ip.startswith(("127.", "192.168.", "10.")):
             continue
 
         now = time.time()
-        traffic[ip].append(now)
+        traffic[src_ip].append(now)
+        traffic[src_ip] = [t for t in traffic[src_ip] if now - t < 10]
 
-        # keep last 10 seconds only
-        traffic[ip] = [t for t in traffic[ip] if now - t < 10]
-
-        # cap traffic list to prevent memory overflow
-        if len(traffic[ip]) > 200:
-            traffic[ip] = traffic[ip][-200:]
+        # cap to prevent memory overflow
+        if len(traffic[src_ip]) > 200:
+            traffic[src_ip] = traffic[src_ip][-200:]
 
         # detection logic
-        if len(traffic[ip]) >= THRESHOLD:
-            print(f"[AI Engine] High traffic detected from {ip} ({len(traffic[ip])} requests in 10s)")
-            print(f"[Threat] Potential DDoS attack from {ip}")
-            block_ip(ip)
-            traffic[ip] = []
+        if len(traffic[src_ip]) >= THRESHOLD:
+            print(f"\n\033[1;33m[AI Engine]\033[0m High traffic detected from {src_ip} ({len(traffic[src_ip])} requests in 10s)")
+            print(f"\033[1;31m[Threat]\033[0m Potential DDoS attack from {src_ip}")
+            print(f"\033[1;34m[Decision Engine]\033[0m Blocking IP: {src_ip} using iptables...\n")
+            block_ip(src_ip)
+            traffic[src_ip] = []
 
-        # slight sleep to prevent CPU spike
-        time.sleep(0.01)
+        time.sleep(0.01)  # prevent CPU spike
 
     except Exception as e:
-        # just log, don’t crash
         print(f"[Error] {e}")
         continue

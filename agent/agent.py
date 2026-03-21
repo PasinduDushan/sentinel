@@ -2,6 +2,7 @@ import subprocess
 import time
 import sys
 import os
+import select
 from datetime import datetime
 from collections import defaultdict
 import requests
@@ -125,7 +126,8 @@ except:
 
 traffic = defaultdict(list)
 THRESHOLD = 30  # requests in 10s to trigger block
-command_check_counter = 0
+COMMAND_CHECK_INTERVAL = 0.5
+last_command_check = time.monotonic()
 
 def extract_ip(part):
     """Extract a valid IPv4 from a string"""
@@ -139,9 +141,22 @@ cmd = ["tcpdump", "-i", "eth0", "-n", "-l", "tcp", "and", "port", "80"]
 proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
 
 while True:
+    now_monotonic = time.monotonic()
+    if now_monotonic - last_command_check >= COMMAND_CHECK_INTERVAL:
+        cmd = check_command()
+        if cmd == "restart":
+            handle_restart()
+        elif cmd == "update":
+            handle_update()
+        last_command_check = now_monotonic
+
+    # Non-blocking wait for tcpdump output so command handling is never starved.
+    readable, _, _ = select.select([proc.stdout], [], [], 0.1)
+    if not readable:
+        continue
+
     line = proc.stdout.readline()
     if not line:
-        time.sleep(0.01)
         continue
 
     try:
@@ -172,16 +187,6 @@ while True:
             log_event(f"[Decision Engine] Blocking IP: {src_ip} using iptables")
             block_ip(src_ip)
             traffic[src_ip] = []
-
-        # Check for commands every 100 iterations (~1 second)
-        command_check_counter += 1
-        if command_check_counter >= 100:
-            cmd = check_command()
-            if cmd == "restart":
-                handle_restart()
-            elif cmd == "update":
-                handle_update()
-            command_check_counter = 0
 
         time.sleep(0.01)  # prevent CPU spike
 

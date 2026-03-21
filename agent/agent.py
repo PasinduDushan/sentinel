@@ -2,12 +2,26 @@ import subprocess
 import time
 import sys
 import os
+from datetime import datetime
 from collections import defaultdict
 import requests
 import re
 from responder import block_ip
 
-print("\033[1;36m[Sentinel] Agent started...\033[0m")
+LOG_FILE = "/opt/sentinel/logs/agent.log"
+
+def log_event(message):
+    """Write to stdout and directly to the agent log file."""
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    line = f"[{ts}] {message}"
+    print(line, flush=True)
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+
+log_event("[Sentinel] Agent started")
 
 # Command file location
 COMMAND_FILE = "/opt/sentinel/command"
@@ -27,20 +41,16 @@ def check_command():
 
 def handle_restart():
     """Gracefully restart the agent"""
-    print("\033[1;36m[Sentinel] Restart command received...\033[0m")
-    sys.stdout.flush()
-    print("\033[1;36m[Sentinel] Gracefully shutting down...\033[0m")
-    sys.stdout.flush()
+    log_event("[Sentinel] Restart command received")
+    log_event("[Sentinel] Gracefully shutting down")
     time.sleep(1)
     sys.exit(0)  # systemd/supervisor will restart it
 
 def handle_update():
     """Update from GitHub and restart"""
-    print("\033[1;36m[Sentinel] Update command received...\033[0m")
-    sys.stdout.flush()
+    log_event("[Sentinel] Update command received")
     try:
-        print("\033[1;36m[Sentinel] Pulling latest from GitHub...\033[0m")
-        sys.stdout.flush()
+        log_event("[Sentinel] Pulling latest from GitHub")
         # Git pull in the sentinel core directory
         result = subprocess.run(
             ["git", "-C", CORE_PATH, "pull"],
@@ -49,19 +59,15 @@ def handle_update():
             timeout=30
         )
         if result.returncode == 0:
-            print(f"\033[1;32m[Success] Updated to latest version\033[0m")
-            sys.stdout.flush()
+            log_event("[Success] Updated to latest version")
         else:
-            print(f"\033[1;31m[Error] Update failed: {result.stderr}\033[0m")
-            sys.stdout.flush()
+            log_event(f"[Error] Update failed: {result.stderr.strip()}")
             return
     except Exception as e:
-        print(f"\033[1;31m[Error] Update error: {e}\033[0m")
-        sys.stdout.flush()
+        log_event(f"[Error] Update error: {e}")
         return
     
-    print("\033[1;36m[Sentinel] Restarting after update...\033[0m")
-    sys.stdout.flush()
+    log_event("[Sentinel] Restarting after update")
     time.sleep(1)
     sys.exit(0)  # systemd/supervisor will restart it
 
@@ -115,12 +121,9 @@ while True:
 
         # detection logic
         if len(traffic[src_ip]) >= THRESHOLD:
-            print(f"\n\033[1;33m[AI Engine]\033[0m High traffic detected from {src_ip} ({len(traffic[src_ip])} requests in 10s)")
-            sys.stdout.flush()
-            print(f"\033[1;31m[Threat]\033[0m Potential DDoS attack from {src_ip}")
-            sys.stdout.flush()
-            print(f"\033[1;34m[Decision Engine]\033[0m Blocking IP: {src_ip} using iptables...\n")
-            sys.stdout.flush()
+            log_event(f"[AI Engine] High traffic detected from {src_ip} ({len(traffic[src_ip])} requests in 10s)")
+            log_event(f"[Threat] Potential DDoS attack from {src_ip}")
+            log_event(f"[Decision Engine] Blocking IP: {src_ip} using iptables")
             block_ip(src_ip)
             traffic[src_ip] = []
 
@@ -137,5 +140,5 @@ while True:
         time.sleep(0.01)  # prevent CPU spike
 
     except Exception as e:
-        print(f"[Error] {e}")
+        log_event(f"[Error] {e}")
         continue

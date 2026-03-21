@@ -24,7 +24,7 @@ def extract_ip(part):
     return None
 
 # tcpdump: only TCP + port 80, line buffered
-cmd = ["tcpdump", "-i", "any", "-n", "-l", "tcp", "and", "port", "80"]
+cmd = ["tcpdump", "-i", "eth0", "-n", "-l", "tcp", "and", "port", "80"]
 proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
 
 while True:

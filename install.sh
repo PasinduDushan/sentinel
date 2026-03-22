@@ -64,6 +64,18 @@ echo ""
 echo -e "$LOG Setting up systemd service..."
 cp /opt/sentinel/core/sentinel.service /etc/systemd/system/sentinel.service
 chmod 644 /etc/systemd/system/sentinel.service
+
+if [ ! -f "/etc/default/sentinel" ]; then
+  cat > /etc/default/sentinel << 'EOF'
+# Sentinel runtime tuning
+SENTINEL_BLOCK_TTL_SECONDS=3600
+SENTINEL_MAX_ACTIVE_BLOCKS=500
+# Comma-separated trusted IPs that should never be blocked
+SENTINEL_WHITELIST=
+EOF
+  chmod 644 /etc/default/sentinel
+fi
+
 echo -e "$SUCCESS Systemd service configured"
 
 echo ""
@@ -124,4 +136,7 @@ echo -e "   \033[0;36msudo /opt/sentinel/sentinel-manage.py restart\033[0m (dire
 echo -e "\033[0m"
 echo -e "   \033[0;36msudo sentinel-manage update\033[0m (via symlink)"
 echo -e "   \033[0;36msudo /opt/sentinel/sentinel-manage.py update\033[0m (direct)"
+echo -e "\033[0m"
+echo -e "   \033[0;36msudo sentinel-manage summary\033[0m (status snapshot)"
+echo -e "   \033[0;36msudo sentinel-manage status\033[0m (alias)"
 echo -e "\033[1;36m======================================\033[0m"

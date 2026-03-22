@@ -7,7 +7,7 @@ from datetime import datetime
 from collections import defaultdict
 import requests
 import re
-from responder import block_ip
+from responder import block_ip, cleanup_expired_blocks
 
 LOG_FILE = "/opt/sentinel/logs/agent.log"
 STATUS_FILE = "/opt/sentinel/update.status"
@@ -128,6 +128,8 @@ traffic = defaultdict(list)
 THRESHOLD = 30  # requests in 10s to trigger block
 COMMAND_CHECK_INTERVAL = 0.5
 last_command_check = time.monotonic()
+CLEANUP_INTERVAL = 5
+last_cleanup_check = time.monotonic()
 
 def extract_ip(part):
     """Extract a valid IPv4 from a string"""
@@ -149,6 +151,12 @@ while True:
         elif cmd == "update":
             handle_update()
         last_command_check = now_monotonic
+
+    if now_monotonic - last_cleanup_check >= CLEANUP_INTERVAL:
+        cleaned = cleanup_expired_blocks()
+        if cleaned > 0:
+            log_event(f"[Sentinel] Cleanup removed {cleaned} expired block(s)")
+        last_cleanup_check = now_monotonic
 
     # Non-blocking wait for tcpdump output so command handling is never starved.
     readable, _, _ = select.select([proc.stdout], [], [], 0.1)

@@ -8,6 +8,7 @@ from collections import defaultdict
 import requests
 import re
 from responder import block_ip, cleanup_expired_blocks
+from detector import assess_traffic
 
 LOG_FILE = "/opt/sentinel/logs/agent.log"
 STATUS_FILE = "/opt/sentinel/update.status"
@@ -125,6 +126,7 @@ except:
     MY_IP = "127.0.0.1"
 
 traffic = defaultdict(list)
+strike_context = defaultdict(int)
 THRESHOLD = 30  # requests in 10s to trigger block
 COMMAND_CHECK_INTERVAL = 0.5
 last_command_check = time.monotonic()
@@ -189,8 +191,23 @@ while True:
             traffic[src_ip] = traffic[src_ip][-200:]
 
         # detection logic
-        if len(traffic[src_ip]) >= THRESHOLD:
-            log_event(f"[AI Engine] High traffic detected from {src_ip} ({len(traffic[src_ip])} requests in 10s)")
+        count_10s = len(traffic[src_ip])
+        assessment = assess_traffic(
+            ip=src_ip,
+            request_count=count_10s,
+            threshold=THRESHOLD,
+            active_ip_count=len(traffic),
+            prior_strikes=strike_context[src_ip],
+        )
+
+        if assessment["should_block"]:
+            strike_context[src_ip] += 1
+            reasons = ", ".join(assessment["reasons"]) if assessment["reasons"] else "none"
+            log_event(
+                f"[AI Engine] score={assessment['score']} confidence={assessment['confidence']}% "
+                f"from {src_ip} ({count_10s} requests in 10s)"
+            )
+            log_event(f"[AI Engine] Context reasons: {reasons}")
             log_event(f"[Threat] Potential DDoS attack from {src_ip}")
             log_event(f"[Decision Engine] Blocking IP: {src_ip} using iptables")
             block_ip(src_ip)

@@ -8,6 +8,11 @@ EnvironmentFile=-/etc/default/sentinel
 Environment=SENTINEL_BLOCK_TTL_SECONDS=3600
 Environment=SENTINEL_MAX_ACTIVE_BLOCKS=500
 Environment=SENTINEL_WHITELIST=
+Environment=SENTINEL_SUBNET_BLOCK_TTL_SECONDS=1800
+Environment=SENTINEL_ESCALATE_ENABLED=1
+Environment=SENTINEL_ESCALATE_STRIKES=5
+Environment=SENTINEL_ESCALATE_WINDOW_SECONDS=120
+Environment=SENTINEL_ESCALATE_PREFIX=24
 ExecStart=/usr/bin/python3 -u /opt/sentinel/core/agent/agent.py
 Restart=always
 RestartSec=10

@@ -27,6 +27,11 @@ def read_runtime_config():
         "SENTINEL_BLOCK_TTL_SECONDS": "3600",
         "SENTINEL_MAX_ACTIVE_BLOCKS": "500",
         "SENTINEL_WHITELIST": "",
+        "SENTINEL_SUBNET_BLOCK_TTL_SECONDS": "1800",
+        "SENTINEL_ESCALATE_ENABLED": "1",
+        "SENTINEL_ESCALATE_STRIKES": "5",
+        "SENTINEL_ESCALATE_WINDOW_SECONDS": "120",
+        "SENTINEL_ESCALATE_PREFIX": "24",
     }
 
     if not os.path.exists(DEFAULT_CONFIG_FILE):
@@ -76,7 +81,12 @@ def show_summary():
 
     config = read_runtime_config()
     print(f"Block TTL (sec)  : {config['SENTINEL_BLOCK_TTL_SECONDS']}")
+    print(f"Subnet TTL (sec) : {config['SENTINEL_SUBNET_BLOCK_TTL_SECONDS']}")
     print(f"Max active blocks: {config['SENTINEL_MAX_ACTIVE_BLOCKS']}")
+    print(f"Escalation       : {config['SENTINEL_ESCALATE_ENABLED']}")
+    print(f"Escalate strikes : {config['SENTINEL_ESCALATE_STRIKES']}")
+    print(f"Escalate window  : {config['SENTINEL_ESCALATE_WINDOW_SECONDS']}")
+    print(f"Escalate prefix  : /{config['SENTINEL_ESCALATE_PREFIX']}")
     print(f"Whitelist        : {config['SENTINEL_WHITELIST'] or '(empty)'}")
 
     input_drop_count = count_drop_rules("INPUT")

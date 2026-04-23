@@ -4,6 +4,7 @@ LOG="\033[1;36m[Sentinel Installer]\033[0m"
 INFO="\033[1;34m[INFO]\033[0m"
 SUCCESS="\033[1;32m[✓]\033[0m"
 ERROR="\033[1;31m[✗]\033[0m"
+WARN="\033[1;33m[!]\033[0m"
 
 echo -e "$LOG Detecting system environment..."
 sleep 1
@@ -65,6 +66,33 @@ echo -e "$LOG Setting up systemd service..."
 cp /opt/sentinel/core/sentinel.service /etc/systemd/system/sentinel.service
 chmod 644 /etc/systemd/system/sentinel.service
 
+# Detect common web services and pick a sensible auth log default.
+DETECTED_WEB_STACK="custom"
+DETECTED_AUTH_LOG=""
+
+if [ -f "/var/log/nginx/access.log" ] || command -v nginx > /dev/null 2>&1; then
+  DETECTED_WEB_STACK="nginx"
+  DETECTED_AUTH_LOG="/var/log/nginx/access.log"
+elif [ -f "/var/log/apache2/access.log" ] || command -v apache2 > /dev/null 2>&1; then
+  DETECTED_WEB_STACK="apache"
+  DETECTED_AUTH_LOG="/var/log/apache2/access.log"
+elif [ -f "/var/log/caddy/access.log" ] || command -v caddy > /dev/null 2>&1; then
+  DETECTED_WEB_STACK="caddy"
+  DETECTED_AUTH_LOG="/var/log/caddy/access.log"
+elif [ -f "/var/log/haproxy.log" ] || command -v haproxy > /dev/null 2>&1; then
+  DETECTED_WEB_STACK="haproxy"
+  DETECTED_AUTH_LOG="/var/log/haproxy.log"
+fi
+
+if [ "$DETECTED_WEB_STACK" = "custom" ]; then
+  echo -e "$WARN No known web stack detected (nginx/apache/caddy/haproxy)."
+  echo -e "$WARN Sentinel will use a placeholder auth log path."
+  echo -e "$WARN Set SENTINEL_AUTH_LOG_PATH in /etc/default/sentinel to your app access log."
+else
+  echo -e "$SUCCESS Detected web stack: $DETECTED_WEB_STACK"
+  echo -e "$INFO Auth guard log path auto-set to: $DETECTED_AUTH_LOG"
+fi
+
 if [ ! -f "/etc/default/sentinel" ]; then
   cat > /etc/default/sentinel << 'EOF'
 # Sentinel runtime tuning
@@ -86,7 +114,7 @@ SENTINEL_AI_WARMUP_MULTIPLIER=1.7
 SENTINEL_AI_ANOMALY_WEIGHT=0.35
 SENTINEL_AI_ZSCORE_BLOCK=3.0
 SENTINEL_AUTH_GUARD_ENABLED=1
-SENTINEL_AUTH_LOG_PATH=/var/log/nginx/access.log
+SENTINEL_AUTH_LOG_PATH=__AUTH_LOG_PATH__
 SENTINEL_AUTH_LOGIN_PATHS=/login,/wp-login.php,/api/auth/login
 SENTINEL_AUTH_FAIL_STATUSES=401,403,429
 SENTINEL_AUTH_IP_FAIL_THRESHOLD=10
@@ -94,7 +122,15 @@ SENTINEL_AUTH_USER_FAIL_THRESHOLD=20
 SENTINEL_AUTH_WINDOW_SECONDS=300
 SENTINEL_AUTH_POLL_INTERVAL=1.0
 EOF
+
+  if [ -z "$DETECTED_AUTH_LOG" ]; then
+    DETECTED_AUTH_LOG="/var/log/custom/access.log"
+  fi
+  sed -i "s|__AUTH_LOG_PATH__|$DETECTED_AUTH_LOG|g" /etc/default/sentinel
+
   chmod 644 /etc/default/sentinel
+else
+  echo -e "$INFO Existing /etc/default/sentinel found. Keeping current values unchanged."
 fi
 
 echo -e "$SUCCESS Systemd service configured"

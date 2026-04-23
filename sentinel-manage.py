@@ -38,6 +38,14 @@ def read_runtime_config():
         "SENTINEL_AI_WARMUP_MULTIPLIER": "1.7",
         "SENTINEL_AI_ANOMALY_WEIGHT": "0.35",
         "SENTINEL_AI_ZSCORE_BLOCK": "3.0",
+        "SENTINEL_AUTH_GUARD_ENABLED": "1",
+        "SENTINEL_AUTH_LOG_PATH": "/var/log/nginx/access.log",
+        "SENTINEL_AUTH_LOGIN_PATHS": "/login,/wp-login.php,/api/auth/login",
+        "SENTINEL_AUTH_FAIL_STATUSES": "401,403,429",
+        "SENTINEL_AUTH_IP_FAIL_THRESHOLD": "10",
+        "SENTINEL_AUTH_USER_FAIL_THRESHOLD": "20",
+        "SENTINEL_AUTH_WINDOW_SECONDS": "300",
+        "SENTINEL_AUTH_POLL_INTERVAL": "1.0",
     }
 
     if not os.path.exists(DEFAULT_CONFIG_FILE):
@@ -99,6 +107,14 @@ def show_summary():
     print(f"AI warmup x-th   : {config['SENTINEL_AI_WARMUP_MULTIPLIER']}")
     print(f"AI anomaly weight: {config['SENTINEL_AI_ANOMALY_WEIGHT']}")
     print(f"AI zscore block  : {config['SENTINEL_AI_ZSCORE_BLOCK']}")
+    print(f"Auth guard       : {config['SENTINEL_AUTH_GUARD_ENABLED']}")
+    print(f"Auth log path    : {config['SENTINEL_AUTH_LOG_PATH']}")
+    print(f"Auth login paths : {config['SENTINEL_AUTH_LOGIN_PATHS']}")
+    print(f"Auth fail status : {config['SENTINEL_AUTH_FAIL_STATUSES']}")
+    print(f"Auth IP threshold: {config['SENTINEL_AUTH_IP_FAIL_THRESHOLD']}")
+    print(f"Auth User thres. : {config['SENTINEL_AUTH_USER_FAIL_THRESHOLD']}")
+    print(f"Auth window (sec): {config['SENTINEL_AUTH_WINDOW_SECONDS']}")
+    print(f"Auth poll (sec)  : {config['SENTINEL_AUTH_POLL_INTERVAL']}")
     print(f"Whitelist        : {config['SENTINEL_WHITELIST'] or '(empty)'}")
 
     input_drop_count = count_drop_rules("INPUT")

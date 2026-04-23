@@ -19,6 +19,14 @@ Environment=SENTINEL_AI_MIN_BLOCK_SCORE=70
 Environment=SENTINEL_AI_WARMUP_MULTIPLIER=1.7
 Environment=SENTINEL_AI_ANOMALY_WEIGHT=0.35
 Environment=SENTINEL_AI_ZSCORE_BLOCK=3.0
+Environment=SENTINEL_AUTH_GUARD_ENABLED=1
+Environment=SENTINEL_AUTH_LOG_PATH=/var/log/nginx/access.log
+Environment=SENTINEL_AUTH_LOGIN_PATHS=/login,/wp-login.php,/api/auth/login
+Environment=SENTINEL_AUTH_FAIL_STATUSES=401,403,429
+Environment=SENTINEL_AUTH_IP_FAIL_THRESHOLD=10
+Environment=SENTINEL_AUTH_USER_FAIL_THRESHOLD=20
+Environment=SENTINEL_AUTH_WINDOW_SECONDS=300
+Environment=SENTINEL_AUTH_POLL_INTERVAL=1.0
 ExecStart=/usr/bin/python3 -u /opt/sentinel/core/agent/agent.py
 Restart=always
 RestartSec=10

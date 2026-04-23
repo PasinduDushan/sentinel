@@ -9,6 +9,7 @@ import requests
 import re
 from responder import block_ip, cleanup_expired_blocks
 from detector import AdaptiveRiskEngine
+from auth_guard import AuthBruteForceGuard
 
 LOG_FILE = "/opt/sentinel/logs/agent.log"
 STATUS_FILE = "/opt/sentinel/update.status"
@@ -143,6 +144,20 @@ AI_WARMUP_MULTIPLIER = float(os.getenv("SENTINEL_AI_WARMUP_MULTIPLIER", "1.7"))
 AI_ANOMALY_WEIGHT = float(os.getenv("SENTINEL_AI_ANOMALY_WEIGHT", "0.35"))
 AI_ZSCORE_BLOCK = float(os.getenv("SENTINEL_AI_ZSCORE_BLOCK", "3.0"))
 
+AUTH_GUARD_ENABLED = env_bool("SENTINEL_AUTH_GUARD_ENABLED", "1")
+AUTH_LOG_PATH = os.getenv("SENTINEL_AUTH_LOG_PATH", "/var/log/nginx/access.log")
+AUTH_LOGIN_PATHS = [
+    p.strip() for p in os.getenv("SENTINEL_AUTH_LOGIN_PATHS", "/login,/wp-login.php,/api/auth/login").split(",") if p.strip()
+]
+AUTH_FAIL_STATUSES = [
+    int(s.strip()) for s in os.getenv("SENTINEL_AUTH_FAIL_STATUSES", "401,403,429").split(",") if s.strip().isdigit()
+]
+AUTH_IP_FAIL_THRESHOLD = int(os.getenv("SENTINEL_AUTH_IP_FAIL_THRESHOLD", "10"))
+AUTH_USER_FAIL_THRESHOLD = int(os.getenv("SENTINEL_AUTH_USER_FAIL_THRESHOLD", "20"))
+AUTH_WINDOW_SECONDS = int(os.getenv("SENTINEL_AUTH_WINDOW_SECONDS", "300"))
+AUTH_POLL_INTERVAL = float(os.getenv("SENTINEL_AUTH_POLL_INTERVAL", "1.0"))
+last_auth_poll = time.monotonic()
+
 risk_engine = AdaptiveRiskEngine(
     enabled=AI_ENABLED,
     learning_samples=AI_LEARNING_SAMPLES,
@@ -152,9 +167,23 @@ risk_engine = AdaptiveRiskEngine(
     zscore_block=AI_ZSCORE_BLOCK,
 )
 
+auth_guard = AuthBruteForceGuard(
+    log_path=AUTH_LOG_PATH,
+    enabled=AUTH_GUARD_ENABLED,
+    login_paths=AUTH_LOGIN_PATHS,
+    fail_statuses=AUTH_FAIL_STATUSES,
+    ip_fail_threshold=AUTH_IP_FAIL_THRESHOLD,
+    user_fail_threshold=AUTH_USER_FAIL_THRESHOLD,
+    window_seconds=AUTH_WINDOW_SECONDS,
+)
+
 log_event(
     f"[Sentinel] AI mode={'enabled' if AI_ENABLED else 'disabled'} "
     f"learning_samples={AI_LEARNING_SAMPLES} min_block_score={AI_MIN_BLOCK_SCORE}"
+)
+log_event(
+    f"[Sentinel] Auth guard={'enabled' if AUTH_GUARD_ENABLED else 'disabled'} "
+    f"log={AUTH_LOG_PATH} ip_threshold={AUTH_IP_FAIL_THRESHOLD} window={AUTH_WINDOW_SECONDS}s"
 )
 
 def extract_ip(part):
@@ -183,6 +212,13 @@ while True:
         if cleaned > 0:
             log_event(f"[Sentinel] Cleanup removed {cleaned} expired block(s)")
         last_cleanup_check = now_monotonic
+
+    if AUTH_GUARD_ENABLED and now_monotonic - last_auth_poll >= AUTH_POLL_INTERVAL:
+        offenders = auth_guard.poll()
+        for offender_ip, reason in offenders:
+            log_event(f"[Auth Guard] Blocking {offender_ip}: {reason}")
+            block_ip(offender_ip)
+        last_auth_poll = now_monotonic
 
     # Non-blocking wait for tcpdump output so command handling is never starved.
     readable, _, _ = select.select([proc.stdout], [], [], 0.1)

@@ -8,7 +8,7 @@ from collections import defaultdict
 import requests
 import re
 from responder import block_ip, cleanup_expired_blocks
-from detector import assess_traffic
+from detector import AdaptiveRiskEngine
 
 LOG_FILE = "/opt/sentinel/logs/agent.log"
 STATUS_FILE = "/opt/sentinel/update.status"
@@ -49,6 +49,9 @@ def finalize_pending_update():
 
 log_event("[Sentinel] Agent started")
 finalize_pending_update()
+
+def env_bool(name, default):
+    return os.getenv(name, default).strip().lower() in ("1", "true", "yes", "on")
 
 # Command file location
 COMMAND_FILE = "/opt/sentinel/command"
@@ -133,6 +136,27 @@ last_command_check = time.monotonic()
 CLEANUP_INTERVAL = 5
 last_cleanup_check = time.monotonic()
 
+AI_ENABLED = env_bool("SENTINEL_AI_ENABLED", "1")
+AI_LEARNING_SAMPLES = int(os.getenv("SENTINEL_AI_LEARNING_SAMPLES", "300"))
+AI_MIN_BLOCK_SCORE = float(os.getenv("SENTINEL_AI_MIN_BLOCK_SCORE", "70"))
+AI_WARMUP_MULTIPLIER = float(os.getenv("SENTINEL_AI_WARMUP_MULTIPLIER", "1.7"))
+AI_ANOMALY_WEIGHT = float(os.getenv("SENTINEL_AI_ANOMALY_WEIGHT", "0.35"))
+AI_ZSCORE_BLOCK = float(os.getenv("SENTINEL_AI_ZSCORE_BLOCK", "3.0"))
+
+risk_engine = AdaptiveRiskEngine(
+    enabled=AI_ENABLED,
+    learning_samples=AI_LEARNING_SAMPLES,
+    min_block_score=AI_MIN_BLOCK_SCORE,
+    warmup_multiplier=AI_WARMUP_MULTIPLIER,
+    anomaly_weight=AI_ANOMALY_WEIGHT,
+    zscore_block=AI_ZSCORE_BLOCK,
+)
+
+log_event(
+    f"[Sentinel] AI mode={'enabled' if AI_ENABLED else 'disabled'} "
+    f"learning_samples={AI_LEARNING_SAMPLES} min_block_score={AI_MIN_BLOCK_SCORE}"
+)
+
 def extract_ip(part):
     """Extract a valid IPv4 from a string"""
     match = re.search(r"(\d{1,3}\.){3}\d{1,3}", part)
@@ -192,7 +216,7 @@ while True:
 
         # detection logic
         count_10s = len(traffic[src_ip])
-        assessment = assess_traffic(
+        assessment = risk_engine.assess_traffic(
             ip=src_ip,
             request_count=count_10s,
             threshold=THRESHOLD,
@@ -203,9 +227,14 @@ while True:
         if assessment["should_block"]:
             strike_context[src_ip] += 1
             reasons = ", ".join(assessment["reasons"]) if assessment["reasons"] else "none"
+            learning_text = (
+                f"learning={assessment['learning_samples_seen']}/{assessment['learning_samples_total']}"
+                if assessment["in_learning"]
+                else "learning=complete"
+            )
             log_event(
                 f"[AI Engine] score={assessment['score']} confidence={assessment['confidence']}% "
-                f"from {src_ip} ({count_10s} requests in 10s)"
+                f"z={assessment['zscore']} {learning_text} from {src_ip} ({count_10s} requests in 10s)"
             )
             log_event(f"[AI Engine] Context reasons: {reasons}")
             log_event(f"[Threat] Potential DDoS attack from {src_ip}")

@@ -32,6 +32,12 @@ def read_runtime_config():
         "SENTINEL_ESCALATE_STRIKES": "5",
         "SENTINEL_ESCALATE_WINDOW_SECONDS": "120",
         "SENTINEL_ESCALATE_PREFIX": "24",
+        "SENTINEL_AI_ENABLED": "1",
+        "SENTINEL_AI_LEARNING_SAMPLES": "300",
+        "SENTINEL_AI_MIN_BLOCK_SCORE": "70",
+        "SENTINEL_AI_WARMUP_MULTIPLIER": "1.7",
+        "SENTINEL_AI_ANOMALY_WEIGHT": "0.35",
+        "SENTINEL_AI_ZSCORE_BLOCK": "3.0",
     }
 
     if not os.path.exists(DEFAULT_CONFIG_FILE):
@@ -87,6 +93,12 @@ def show_summary():
     print(f"Escalate strikes : {config['SENTINEL_ESCALATE_STRIKES']}")
     print(f"Escalate window  : {config['SENTINEL_ESCALATE_WINDOW_SECONDS']}")
     print(f"Escalate prefix  : /{config['SENTINEL_ESCALATE_PREFIX']}")
+    print(f"AI enabled       : {config['SENTINEL_AI_ENABLED']}")
+    print(f"AI warmup samples: {config['SENTINEL_AI_LEARNING_SAMPLES']}")
+    print(f"AI min score     : {config['SENTINEL_AI_MIN_BLOCK_SCORE']}")
+    print(f"AI warmup x-th   : {config['SENTINEL_AI_WARMUP_MULTIPLIER']}")
+    print(f"AI anomaly weight: {config['SENTINEL_AI_ANOMALY_WEIGHT']}")
+    print(f"AI zscore block  : {config['SENTINEL_AI_ZSCORE_BLOCK']}")
     print(f"Whitelist        : {config['SENTINEL_WHITELIST'] or '(empty)'}")
 
     input_drop_count = count_drop_rules("INPUT")

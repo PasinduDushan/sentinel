@@ -293,7 +293,7 @@ def render_table(rows, title, empty_message="No active DROP rules"):
     body = []
     for row in rows:
         body.append(
-            f"<tr><td>{html_escape(row['source'])}</td><td>{html_escape(row['pkts'])}</td><td>{html_escape(normalize_bytes(row['bytes']))}</td><td>{html_escape(row['line'])}</td></tr>"
+            f"<tr><td>{html_escape(row.get('source', 'N/A'))}</td><td>{html_escape(row.get('pkts', 'N/A'))}</td><td>{html_escape(normalize_bytes(row.get('bytes', 0)))}</td><td>{html_escape(row.get('line', 'N/A'))}</td></tr>"
         )
     return f"""
     <section class=\"panel\">

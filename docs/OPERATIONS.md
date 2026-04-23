@@ -65,6 +65,8 @@ Then open:
 
     http://127.0.0.1:8088
 
+If you see `Permission denied (publickey)`, the tunnel syntax is fine but SSH authentication is not. Use the correct login user, install your public key on the server, or connect with the account that already has SSH access.
+
 Logs:
 
     sudo tail -f /opt/sentinel/logs/agent.log

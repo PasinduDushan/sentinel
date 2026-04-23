@@ -27,6 +27,8 @@ Secure access for local demo:
     ssh -L 8088:127.0.0.1:8088 user@YOUR_SERVER_IP
     http://127.0.0.1:8088
 
+Use a real SSH account that already has key-based access on the server. If root login is disabled, connect as your normal sudo user instead of `root`.
+
 ## Documentation Index
 
 1. Operations runbook: [docs/OPERATIONS.md](docs/OPERATIONS.md)

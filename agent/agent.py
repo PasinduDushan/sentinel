@@ -3,6 +3,7 @@ import time
 import sys
 import os
 import select
+import shutil
 from datetime import datetime
 from collections import defaultdict
 import requests
@@ -58,6 +59,20 @@ def env_bool(name, default):
 COMMAND_FILE = "/opt/sentinel/command"
 CORE_PATH = "/opt/sentinel/core"
 
+
+def deploy_runtime_files():
+    """Sync runtime helper files from repo to system paths after update."""
+    service_src = os.path.join(CORE_PATH, "sentinel.service")
+    manage_src = os.path.join(CORE_PATH, "sentinel-manage.py")
+
+    if os.path.exists(service_src):
+        shutil.copy2(service_src, "/etc/systemd/system/sentinel.service")
+        os.chmod("/etc/systemd/system/sentinel.service", 0o644)
+
+    if os.path.exists(manage_src):
+        shutil.copy2(manage_src, "/opt/sentinel/sentinel-manage.py")
+        os.chmod("/opt/sentinel/sentinel-manage.py", 0o755)
+
 def check_command():
     """Check if a command file exists and return its content"""
     if os.path.exists(COMMAND_FILE):
@@ -101,6 +116,16 @@ def handle_update():
             pull_summary = (result.stdout or "").strip() or "Git pull completed"
             write_status("UPDATE_SUCCESS", pull_summary)
             log_event("[Success] Updated to latest version")
+
+            try:
+                write_status("UPDATE_SYNCING", "Syncing service and manager files")
+                deploy_runtime_files()
+                subprocess.run(["systemctl", "daemon-reload"], capture_output=True, text=True, timeout=15)
+                write_status("UPDATE_SYNCED", "Runtime files synchronized")
+            except Exception as sync_err:
+                write_status("UPDATE_ERROR", f"Runtime sync failed: {sync_err}")
+                log_event(f"[Error] Runtime sync failed: {sync_err}")
+                return
         else:
             write_status("UPDATE_ERROR", result.stderr.strip())
             log_event(f"[Error] Update failed: {result.stderr.strip()}")

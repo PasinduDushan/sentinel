@@ -11,7 +11,8 @@ This document explains how Sentinel works from top to bottom, including detectio
 5. Enforce block in iptables when decision threshold is met.
 6. Escalate repeated offenders to subnet block when policy triggers.
 7. Periodically cleanup expired rules and stale state.
-8. Handle management commands (restart/update) in-band.
+8. Surface status and health through a local dashboard.
+9. Handle management commands (restart/update) in-band.
 
 ## 2) Main components
 
@@ -32,6 +33,12 @@ This document explains how Sentinel works from top to bottom, including detectio
 
 6. [sentinel.service](../sentinel.service)
 - Systemd runtime and environment-driven tuning.
+
+7. [dashboard.py](../dashboard.py)
+- Local read-only web dashboard for service health, counters, recent events, and policy visibility.
+
+8. [sentinel-dashboard.service](../sentinel-dashboard.service)
+- Systemd unit for the dashboard web UI.
 
 ## 3) Detection pipeline details
 
@@ -145,7 +152,22 @@ Update flow:
 4. Exits for controlled systemd restart.
 5. Marks update complete after restart.
 
-## 9) Operational interpretation notes
+## 9) Dashboard layer
+
+Dashboard purpose:
+
+1. Give operators a live, polished view of Sentinel.
+2. Show service health, current policy, and recent incidents.
+3. Highlight active DROP rules and top offenders.
+4. Provide a safe read-only control plane for demos and day-to-day monitoring.
+
+Access model:
+
+1. Binds to localhost by default.
+2. Can be reached securely with SSH port forwarding.
+3. Can be exposed only if an operator intentionally changes the bind address.
+
+## 10) Operational interpretation notes
 
 DROP counter increases:
 
@@ -157,7 +179,7 @@ Cloud IP ownership:
 1. WHOIS org only identifies range owner.
 2. Does not prove attacker identity or intent.
 
-## 10) Runtime tuning strategy
+## 11) Runtime tuning strategy
 
 When too strict:
 

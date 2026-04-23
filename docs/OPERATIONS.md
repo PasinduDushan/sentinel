@@ -20,7 +20,9 @@ Installer outcome:
 4. Installs systemd unit /etc/systemd/system/sentinel.service.
 5. Seeds runtime config /etc/default/sentinel.
 6. Installs manager /opt/sentinel/sentinel-manage.py and symlink /usr/local/bin/sentinel-manage.
-7. Enables and starts sentinel.service.
+7. Installs dashboard /opt/sentinel/dashboard.py and /etc/systemd/system/sentinel-dashboard.service.
+8. Enables and starts sentinel.service.
+9. Enables and starts sentinel-dashboard.service.
 
 ## 2) Important paths
 
@@ -30,6 +32,8 @@ Installer outcome:
 4. Logs: /opt/sentinel/logs/agent.log
 5. Manager: /opt/sentinel/sentinel-manage.py
 6. Manager shortcut: /usr/local/bin/sentinel-manage
+7. Dashboard: /opt/sentinel/dashboard.py
+8. Dashboard service: /etc/systemd/system/sentinel-dashboard.service
 
 ## 3) Day-to-day commands
 
@@ -46,6 +50,20 @@ Manager lifecycle:
     sudo sentinel-manage update
     sudo sentinel-manage summary
     sudo sentinel-manage status
+
+Dashboard lifecycle:
+
+    sudo systemctl status sentinel-dashboard.service
+    sudo systemctl restart sentinel-dashboard.service
+    sudo systemctl stop sentinel-dashboard.service
+
+Recommended secure access:
+
+    ssh -L 8088:127.0.0.1:8088 user@YOUR_SERVER_IP
+
+Then open:
+
+    http://127.0.0.1:8088
 
 Logs:
 
@@ -95,6 +113,10 @@ Apply:
 20. SENTINEL_AUTH_USER_FAIL_THRESHOLD=20
 21. SENTINEL_AUTH_WINDOW_SECONDS=300
 22. SENTINEL_AUTH_POLL_INTERVAL=1.0
+23. SENTINEL_DASHBOARD_ENABLED=1
+24. SENTINEL_DASHBOARD_BIND=127.0.0.1
+25. SENTINEL_DASHBOARD_PORT=8088
+26. SENTINEL_DASHBOARD_TITLE=Sentinel Dashboard
 
 ### 4.2 Recommended starting profile (balanced)
 
@@ -120,6 +142,29 @@ Apply:
     SENTINEL_AUTH_USER_FAIL_THRESHOLD=25
     SENTINEL_AUTH_WINDOW_SECONDS=300
     SENTINEL_AUTH_POLL_INTERVAL=1.0
+    SENTINEL_DASHBOARD_ENABLED=1
+    SENTINEL_DASHBOARD_BIND=127.0.0.1
+    SENTINEL_DASHBOARD_PORT=8088
+    SENTINEL_DASHBOARD_TITLE=Sentinel Dashboard
+
+### 4.4 Dashboard
+
+The dashboard is the clean demo surface for leadership and day-to-day ops.
+
+It shows:
+
+1. Sentinel service health.
+2. Dashboard service health.
+3. Firewall DROP counts.
+4. Top offenders by packet counters.
+5. Recent AI/auth/escalation events.
+6. Runtime policy values.
+
+Default access:
+
+1. Dashboard binds to 127.0.0.1 by default.
+2. Use SSH forwarding for secure access.
+3. Set SENTINEL_DASHBOARD_BIND only if you explicitly want remote exposure.
 
 ### 4.3 Brute-force login protection
 
@@ -138,6 +183,12 @@ Common setup notes:
 1. If you use Apache, set SENTINEL_AUTH_LOG_PATH=/var/log/apache2/access.log.
 2. Add your app login endpoints to SENTINEL_AUTH_LOGIN_PATHS.
 3. Ensure failed auth responses return one of SENTINEL_AUTH_FAIL_STATUSES.
+
+Dashboard notes:
+
+1. Use SSH tunnel for demo access.
+2. If you need a public binding, restrict it with firewall rules.
+3. Dashboard is built for operators, not general end users.
 
 ## 5) Safe testing
 

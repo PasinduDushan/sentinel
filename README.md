@@ -17,13 +17,21 @@ Equivalent one-shot form:
     sudo sentinel-manage update
     sudo tail -f /opt/sentinel/logs/agent.log
 
+Dashboard service:
+
+    sudo systemctl status sentinel-dashboard.service
+    sudo systemctl restart sentinel-dashboard.service
+
+Secure access for local demo:
+
+    ssh -L 8088:127.0.0.1:8088 user@YOUR_SERVER_IP
+    http://127.0.0.1:8088
+
 ## Documentation Index
 
 1. Operations runbook: [docs/OPERATIONS.md](docs/OPERATIONS.md)
 2. System internals and logic: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ## Security note
-
-Use Sentinel only on infrastructure you own or have explicit authorization to protect and test.
 
 Use Sentinel only on infrastructure you own or have explicit authorization to protect and test.

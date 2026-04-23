@@ -93,6 +93,13 @@ def show_summary():
     print(f"Service state    : {service_state}")
     print(f"Service enabled  : {service_enabled}")
 
+    rc_dash_active, dash_active_out, dash_active_err = run_command(["systemctl", "is-active", "sentinel-dashboard.service"])
+    rc_dash_enabled, dash_enabled_out, dash_enabled_err = run_command(["systemctl", "is-enabled", "sentinel-dashboard.service"])
+    dash_state = dash_active_out if rc_dash_active == 0 else (dash_active_out or dash_active_err or "unknown")
+    dash_enabled = dash_enabled_out if rc_dash_enabled == 0 else (dash_enabled_out or dash_enabled_err or "unknown")
+    print(f"Dashboard state  : {dash_state}")
+    print(f"Dashboard enabled: {dash_enabled}")
+
     config = read_runtime_config()
     print(f"Block TTL (sec)  : {config['SENTINEL_BLOCK_TTL_SECONDS']}")
     print(f"Subnet TTL (sec) : {config['SENTINEL_SUBNET_BLOCK_TTL_SECONDS']}")
@@ -115,6 +122,14 @@ def show_summary():
     print(f"Auth User thres. : {config['SENTINEL_AUTH_USER_FAIL_THRESHOLD']}")
     print(f"Auth window (sec): {config['SENTINEL_AUTH_WINDOW_SECONDS']}")
     print(f"Auth poll (sec)  : {config['SENTINEL_AUTH_POLL_INTERVAL']}")
+    print(f"Dashboard bind   : {config.get('SENTINEL_DASHBOARD_BIND', '127.0.0.1')}")
+    print(f"Dashboard port   : {config.get('SENTINEL_DASHBOARD_PORT', '8088')}")
+    print(f"Dashboard title  : {config.get('SENTINEL_DASHBOARD_TITLE', 'Sentinel Dashboard')}")
+    dashboard_bind = config.get('SENTINEL_DASHBOARD_BIND', '127.0.0.1')
+    dashboard_port = config.get('SENTINEL_DASHBOARD_PORT', '8088')
+    print(f"Dashboard URL    : http://{dashboard_bind}:{dashboard_port}")
+    if dashboard_bind == '127.0.0.1':
+        print("Dashboard access  : Use SSH tunnel -L 8088:127.0.0.1:8088")
     print(f"Whitelist        : {config['SENTINEL_WHITELIST'] or '(empty)'}")
 
     input_drop_count = count_drop_rules("INPUT")

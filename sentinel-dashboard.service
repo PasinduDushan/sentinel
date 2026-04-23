@@ -1,0 +1,21 @@
+[Unit]
+Description=Sentinel Dashboard
+After=network.target sentinel.service
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/sentinel
+Environment=SENTINEL_DASHBOARD_ENABLED=1
+Environment=SENTINEL_DASHBOARD_BIND=127.0.0.1
+Environment=SENTINEL_DASHBOARD_PORT=8088
+Environment=SENTINEL_DASHBOARD_TITLE=Sentinel Dashboard
+ExecStart=/usr/bin/python3 -u /opt/sentinel/dashboard.py
+Restart=always
+RestartSec=5
+User=root
+WorkingDirectory=/opt/sentinel
+StandardOutput=append:/opt/sentinel/logs/dashboard.log
+StandardError=append:/opt/sentinel/logs/dashboard.log
+
+[Install]
+WantedBy=multi-user.target

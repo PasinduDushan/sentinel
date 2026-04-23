@@ -59,6 +59,7 @@ echo -e "$SUCCESS Agent files verified"
 echo ""
 echo -e "$LOG Initializing logs..."
 touch /opt/sentinel/logs/agent.log
+touch /opt/sentinel/logs/dashboard.log
 echo -e "$SUCCESS Log file initialized"
 
 echo ""
@@ -121,6 +122,10 @@ SENTINEL_AUTH_IP_FAIL_THRESHOLD=10
 SENTINEL_AUTH_USER_FAIL_THRESHOLD=20
 SENTINEL_AUTH_WINDOW_SECONDS=300
 SENTINEL_AUTH_POLL_INTERVAL=1.0
+SENTINEL_DASHBOARD_ENABLED=1
+SENTINEL_DASHBOARD_BIND=127.0.0.1
+SENTINEL_DASHBOARD_PORT=8088
+SENTINEL_DASHBOARD_TITLE=Sentinel Dashboard
 EOF
 
   if [ -z "$DETECTED_AUTH_LOG" ]; then
@@ -134,6 +139,14 @@ else
 fi
 
 echo -e "$SUCCESS Systemd service configured"
+
+echo ""
+echo -e "$LOG Deploying dashboard service..."
+cp /opt/sentinel/core/sentinel-dashboard.service /etc/systemd/system/sentinel-dashboard.service
+chmod 644 /etc/systemd/system/sentinel-dashboard.service
+cp /opt/sentinel/core/dashboard.py /opt/sentinel/dashboard.py
+chmod 755 /opt/sentinel/dashboard.py
+echo -e "$SUCCESS Dashboard deployed"
 
 echo ""
 echo -e "$LOG Deploying management script..."
@@ -168,6 +181,14 @@ echo -e "$INFO Running: systemctl start sentinel.service"
 systemctl start sentinel.service
 echo -e "$SUCCESS Systemd service started"
 
+echo ""
+echo -e "$LOG Starting Sentinel Dashboard via systemd..."
+echo -e "$INFO Running: systemctl enable sentinel-dashboard.service"
+systemctl enable sentinel-dashboard.service 2>&1 | sed 's/^/    /'
+echo -e "$INFO Running: systemctl start sentinel-dashboard.service"
+systemctl start sentinel-dashboard.service
+echo -e "$SUCCESS Dashboard service started"
+
 sleep 2
 
 # Check service status
@@ -177,14 +198,23 @@ else
   STATUS="\033[1;31m❌ FAILED\033[0m"
 fi
 
+if systemctl is-active --quiet sentinel-dashboard.service; then
+  DASH_STATUS="\033[1;32m✅ RUNNING\033[0m"
+else
+  DASH_STATUS="\033[1;31m❌ FAILED\033[0m"
+fi
+
 echo -e "$LOG Sentinel Protection: ACTIVE ✅"
 echo -e "\033[1;36m======================================\033[0m"
 echo -e "\033[1;32m Sentinel Agent Installed Successfully\033[0m"
 echo -e "\033[0m"
 echo -e " Agent ID  : $AGENT_ID"
 echo -e " Status    : $STATUS"
+echo -e " Dash      : $DASH_STATUS"
 echo -e " Service   : /etc/systemd/system/sentinel.service"
+echo -e " Dashboard : /etc/systemd/system/sentinel-dashboard.service"
 echo -e " Logs      : /opt/sentinel/logs/agent.log"
+echo -e " Dash Log  : /opt/sentinel/logs/dashboard.log"
 echo -e " Manage    : /opt/sentinel/sentinel-manage.py"
 echo -e "\033[0m"
 echo -e "\033[1;33m Management Commands:\033[0m"

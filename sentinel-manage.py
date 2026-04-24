@@ -16,13 +16,19 @@ STATUS_FILE = "/opt/sentinel/update.status"
 DEFAULT_CONFIG_FILE = "/etc/default/sentinel"
 LOG_FILE = "/opt/sentinel/logs/agent.log"
 
+
 def run_command(cmd):
     """Run shell command and return (rc, stdout, stderr)."""
     try:
         result = subprocess.run(cmd, capture_output=True, text=True)
-        return result.returncode, (result.stdout or "").strip(), (result.stderr or "").strip()
+        return (
+            result.returncode,
+            (result.stdout or "").strip(),
+            (result.stderr or "").strip(),
+        )
     except Exception as e:
         return 1, "", str(e)
+
 
 def read_runtime_config():
     """Read runtime settings from /etc/default/sentinel with fallbacks."""
@@ -49,6 +55,9 @@ def read_runtime_config():
         "SENTINEL_AUTH_USER_FAIL_THRESHOLD": "20",
         "SENTINEL_AUTH_WINDOW_SECONDS": "300",
         "SENTINEL_AUTH_POLL_INTERVAL": "1.0",
+        "SENTINEL_WEB_ENDPOINT_LEARNING_SAMPLES": "120",
+        "SENTINEL_WEB_ENDPOINT_ZSCORE_BLOCK": "3.0",
+        "SENTINEL_WEB_ENDPOINT_ANOMALY_WEIGHT": "0.45",
     }
 
     if not os.path.exists(DEFAULT_CONFIG_FILE):
@@ -70,6 +79,7 @@ def read_runtime_config():
 
     return config
 
+
 def count_drop_rules(chain):
     """Count source-IP drop rules in a chain."""
     rc, out, _ = run_command(["iptables", "-S", chain])
@@ -82,8 +92,11 @@ def count_drop_rules(chain):
             count += 1
     return count
 
+
 WEB_EVENT_PATTERNS = {
-    "web_blocks": re.compile(r"\[Web Guard\] Blocking (?P<ip>\S+): (?P<reason>.+)", re.IGNORECASE),
+    "web_blocks": re.compile(
+        r"\[Web Guard\] Blocking (?P<ip>\S+): (?P<reason>.+)", re.IGNORECASE
+    ),
     "web_sqli": re.compile(r"web-sqli-detected", re.IGNORECASE),
     "web_xss": re.compile(r"web-xss-detected", re.IGNORECASE),
     "web_rate_limit": re.compile(r"web-rate-limit", re.IGNORECASE),
@@ -107,24 +120,45 @@ def count_log_events(patterns, limit=300):
                 counts[key] += 1
     return counts
 
+
 def show_summary():
     """Print one-shot Sentinel status summary."""
     print("Sentinel Summary")
     print("================")
 
-    rc_active, active_out, active_err = run_command(["systemctl", "is-active", "sentinel.service"])
-    rc_enabled, enabled_out, enabled_err = run_command(["systemctl", "is-enabled", "sentinel.service"])
+    rc_active, active_out, active_err = run_command(
+        ["systemctl", "is-active", "sentinel.service"]
+    )
+    rc_enabled, enabled_out, enabled_err = run_command(
+        ["systemctl", "is-enabled", "sentinel.service"]
+    )
 
-    service_state = active_out if rc_active == 0 else (active_out or active_err or "unknown")
-    service_enabled = enabled_out if rc_enabled == 0 else (enabled_out or enabled_err or "unknown")
+    service_state = (
+        active_out if rc_active == 0 else (active_out or active_err or "unknown")
+    )
+    service_enabled = (
+        enabled_out if rc_enabled == 0 else (enabled_out or enabled_err or "unknown")
+    )
 
     print(f"Service state    : {service_state}")
     print(f"Service enabled  : {service_enabled}")
 
-    rc_dash_active, dash_active_out, dash_active_err = run_command(["systemctl", "is-active", "sentinel-dashboard.service"])
-    rc_dash_enabled, dash_enabled_out, dash_enabled_err = run_command(["systemctl", "is-enabled", "sentinel-dashboard.service"])
-    dash_state = dash_active_out if rc_dash_active == 0 else (dash_active_out or dash_active_err or "unknown")
-    dash_enabled = dash_enabled_out if rc_dash_enabled == 0 else (dash_enabled_out or dash_enabled_err or "unknown")
+    rc_dash_active, dash_active_out, dash_active_err = run_command(
+        ["systemctl", "is-active", "sentinel-dashboard.service"]
+    )
+    rc_dash_enabled, dash_enabled_out, dash_enabled_err = run_command(
+        ["systemctl", "is-enabled", "sentinel-dashboard.service"]
+    )
+    dash_state = (
+        dash_active_out
+        if rc_dash_active == 0
+        else (dash_active_out or dash_active_err or "unknown")
+    )
+    dash_enabled = (
+        dash_enabled_out
+        if rc_dash_enabled == 0
+        else (dash_enabled_out or dash_enabled_err or "unknown")
+    )
     print(f"Dashboard state  : {dash_state}")
     print(f"Dashboard enabled: {dash_enabled}")
 
@@ -151,16 +185,25 @@ def show_summary():
     print(f"Auth window (sec): {config['SENTINEL_AUTH_WINDOW_SECONDS']}")
     print(f"Auth poll (sec)  : {config['SENTINEL_AUTH_POLL_INTERVAL']}")
     print(f"Web guard        : {config.get('SENTINEL_WEB_GUARD_ENABLED', '1')}")
-    print(f"Web log path     : {config.get('SENTINEL_WEB_LOG_PATH', config['SENTINEL_AUTH_LOG_PATH'])}")
+    print(
+        f"Web log path     : {config.get('SENTINEL_WEB_LOG_PATH', config['SENTINEL_AUTH_LOG_PATH'])}"
+    )
     print(f"Web attack thres.: {config.get('SENTINEL_WEB_ATTACK_THRESHOLD', '2')}")
-    print(f"Web rate limit   : {config.get('SENTINEL_WEB_RATE_LIMIT_THRESHOLD', '120')}/{config.get('SENTINEL_WEB_RATE_LIMIT_WINDOW_SECONDS', '60')}s")
+    print(
+        f"Web rate limit   : {config.get('SENTINEL_WEB_RATE_LIMIT_THRESHOLD', '120')}/{config.get('SENTINEL_WEB_RATE_LIMIT_WINDOW_SECONDS', '60')}s"
+    )
+    print(
+        f"Web endpoint AI  : {config.get('SENTINEL_WEB_ENDPOINT_LEARNING_SAMPLES', '120')} samples / z={config.get('SENTINEL_WEB_ENDPOINT_ZSCORE_BLOCK', '3.0')} / w={config.get('SENTINEL_WEB_ENDPOINT_ANOMALY_WEIGHT', '0.45')}"
+    )
     print(f"Dashboard bind   : {config.get('SENTINEL_DASHBOARD_BIND', '127.0.0.1')}")
     print(f"Dashboard port   : {config.get('SENTINEL_DASHBOARD_PORT', '8088')}")
-    print(f"Dashboard title  : {config.get('SENTINEL_DASHBOARD_TITLE', 'Sentinel Dashboard')}")
-    dashboard_bind = config.get('SENTINEL_DASHBOARD_BIND', '127.0.0.1')
-    dashboard_port = config.get('SENTINEL_DASHBOARD_PORT', '8088')
+    print(
+        f"Dashboard title  : {config.get('SENTINEL_DASHBOARD_TITLE', 'Sentinel Dashboard')}"
+    )
+    dashboard_bind = config.get("SENTINEL_DASHBOARD_BIND", "127.0.0.1")
+    dashboard_port = config.get("SENTINEL_DASHBOARD_PORT", "8088")
     print(f"Dashboard URL    : http://{dashboard_bind}:{dashboard_port}")
-    if dashboard_bind == '127.0.0.1':
+    if dashboard_bind == "127.0.0.1":
         print("Dashboard access  : Use SSH tunnel -L 8088:127.0.0.1:8088")
     print(f"Whitelist        : {config['SENTINEL_WHITELIST'] or '(empty)'}")
 
@@ -170,29 +213,38 @@ def show_summary():
 
     input_text = str(input_drop_count) if input_drop_count is not None else "n/a"
     docker_text = str(docker_drop_count) if docker_drop_count is not None else "n/a"
-    web_total = web_counts.get("web_blocks", 0) + web_counts.get("web_sqli", 0) + web_counts.get("web_xss", 0) + web_counts.get("web_rate_limit", 0)
+    web_total = (
+        web_counts.get("web_blocks", 0)
+        + web_counts.get("web_sqli", 0)
+        + web_counts.get("web_xss", 0)
+        + web_counts.get("web_rate_limit", 0)
+    )
 
     print(f"INPUT DROP rules : {input_text}")
     print(f"DOCKER-USER DROP : {docker_text}")
     print(f"Web guard total  : {web_total}")
-    print(f"Web SQLi/XSS     : {web_counts.get('web_sqli', 0) + web_counts.get('web_xss', 0)}")
+    print(
+        f"Web SQLi/XSS     : {web_counts.get('web_sqli', 0) + web_counts.get('web_xss', 0)}"
+    )
     print(f"Web rate limit   : {web_counts.get('web_rate_limit', 0)}")
     print("Logs             : /opt/sentinel/logs/agent.log")
+
 
 def send_command(cmd):
     """Send a command to the agent"""
     if not os.access("/opt/sentinel", os.W_OK):
         print("Error: You need root privileges to manage Sentinel")
         sys.exit(1)
-    
+
     try:
-        with open(COMMAND_FILE, 'w') as f:
+        with open(COMMAND_FILE, "w") as f:
             f.write(cmd.lower())
         print(f"✓ Command sent: {cmd}")
         print(f"  Agent will execute this within ~1 second")
     except Exception as e:
         print(f"Error: {e}")
         sys.exit(1)
+
 
 def clear_status_file():
     """Remove old status file so only fresh update statuses are displayed."""
@@ -202,17 +254,19 @@ def clear_status_file():
         except Exception:
             pass
 
+
 def read_last_status_line():
     if not os.path.exists(STATUS_FILE):
         return None
     try:
-        with open(STATUS_FILE, 'r', encoding='utf-8') as f:
+        with open(STATUS_FILE, "r", encoding="utf-8") as f:
             lines = [line.strip() for line in f.readlines() if line.strip()]
         if not lines:
             return None
         return lines[-1]
     except Exception:
         return None
+
 
 def wait_for_update_status(timeout_seconds=180):
     """Show live update progress and return non-zero on failure/timeout."""
@@ -239,6 +293,7 @@ def wait_for_update_status(timeout_seconds=180):
     print("  Check logs: sudo tail -f /opt/sentinel/logs/agent.log")
     return 1
 
+
 def main():
     if len(sys.argv) < 2:
         print("Usage: sentinel-manage.py <command>")
@@ -254,7 +309,7 @@ def main():
         print("  sudo ./sentinel-manage.py update")
         print("  sudo ./sentinel-manage.py summary")
         sys.exit(1)
-    
+
     cmd = sys.argv[1]
     if cmd not in ["restart", "update", "summary", "status"]:
         print(f"Unknown command: {cmd}")
@@ -264,13 +319,14 @@ def main():
     if cmd in ["summary", "status"]:
         show_summary()
         return
-    
+
     if cmd == "update":
         clear_status_file()
         send_command(cmd)
         sys.exit(wait_for_update_status())
 
     send_command(cmd)
+
 
 if __name__ == "__main__":
     main()

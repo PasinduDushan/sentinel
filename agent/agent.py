@@ -191,6 +191,9 @@ WEB_ATTACK_WINDOW_SECONDS = int(os.getenv("SENTINEL_WEB_ATTACK_WINDOW_SECONDS", 
 WEB_RATE_LIMIT_THRESHOLD = int(os.getenv("SENTINEL_WEB_RATE_LIMIT_THRESHOLD", "120"))
 WEB_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("SENTINEL_WEB_RATE_LIMIT_WINDOW_SECONDS", "60"))
 WEB_POLL_INTERVAL = float(os.getenv("SENTINEL_WEB_POLL_INTERVAL", "1.0"))
+WEB_ENDPOINT_LEARNING_SAMPLES = int(os.getenv("SENTINEL_WEB_ENDPOINT_LEARNING_SAMPLES", "120"))
+WEB_ENDPOINT_ZSCORE_BLOCK = float(os.getenv("SENTINEL_WEB_ENDPOINT_ZSCORE_BLOCK", "3.0"))
+WEB_ENDPOINT_ANOMALY_WEIGHT = float(os.getenv("SENTINEL_WEB_ENDPOINT_ANOMALY_WEIGHT", "0.45"))
 last_web_poll = time.monotonic()
 
 risk_engine = AdaptiveRiskEngine(
@@ -219,6 +222,9 @@ web_guard = WebAttackGuard(
     attack_window_seconds=WEB_ATTACK_WINDOW_SECONDS,
     rate_limit_threshold=WEB_RATE_LIMIT_THRESHOLD,
     rate_limit_window_seconds=WEB_RATE_LIMIT_WINDOW_SECONDS,
+    endpoint_learning_samples=WEB_ENDPOINT_LEARNING_SAMPLES,
+    endpoint_zscore_block=WEB_ENDPOINT_ZSCORE_BLOCK,
+    endpoint_anomaly_weight=WEB_ENDPOINT_ANOMALY_WEIGHT,
 )
 
 log_event(
@@ -231,7 +237,7 @@ log_event(
 )
 log_event(
     f"[Sentinel] Web guard={'enabled' if WEB_GUARD_ENABLED else 'disabled'} "
-    f"log={WEB_LOG_PATH} attack_threshold={WEB_ATTACK_THRESHOLD} rate_limit={WEB_RATE_LIMIT_THRESHOLD}/{WEB_RATE_LIMIT_WINDOW_SECONDS}s"
+    f"log={WEB_LOG_PATH} attack_threshold={WEB_ATTACK_THRESHOLD} rate_limit={WEB_RATE_LIMIT_THRESHOLD}/{WEB_RATE_LIMIT_WINDOW_SECONDS}s endpoint_learning={WEB_ENDPOINT_LEARNING_SAMPLES}"
 )
 
 def extract_ip(part):

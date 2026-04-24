@@ -1,7 +1,39 @@
 import os
 import re
 import time
+from math import sqrt
 from collections import defaultdict
+
+
+class EndpointProfile:
+    def __init__(self, learning_samples=120):
+        self.learning_samples = max(20, int(learning_samples))
+        self.samples_seen = 0
+        self.mean = 0.0
+        self.m2 = 0.0
+
+    def update(self, value):
+        self.samples_seen += 1
+        delta = value - self.mean
+        self.mean += delta / self.samples_seen
+        delta2 = value - self.mean
+        self.m2 += delta * delta2
+
+    def variance(self):
+        if self.samples_seen < 2:
+            return 0.0
+        return self.m2 / (self.samples_seen - 1)
+
+    def stddev(self):
+        return sqrt(self.variance())
+
+    def zscore(self, value):
+        if self.samples_seen < self.learning_samples:
+            return 0.0
+        stddev = self.stddev()
+        if stddev == 0:
+            return 0.0
+        return (value - self.mean) / stddev
 
 
 class WebAttackGuard:
@@ -27,6 +59,9 @@ class WebAttackGuard:
         attack_window_seconds=300,
         rate_limit_threshold=120,
         rate_limit_window_seconds=60,
+        endpoint_learning_samples=120,
+        endpoint_zscore_block=3.0,
+        endpoint_anomaly_weight=0.45,
         max_lines_per_poll=250,
     ):
         self.enabled = enabled
@@ -35,10 +70,14 @@ class WebAttackGuard:
         self.attack_window_seconds = max(10, int(attack_window_seconds))
         self.rate_limit_threshold = max(5, int(rate_limit_threshold))
         self.rate_limit_window_seconds = max(10, int(rate_limit_window_seconds))
+        self.endpoint_learning_samples = max(20, int(endpoint_learning_samples))
+        self.endpoint_zscore_block = float(endpoint_zscore_block)
+        self.endpoint_anomaly_weight = float(endpoint_anomaly_weight)
         self.max_lines_per_poll = max(20, int(max_lines_per_poll))
 
         self.ip_attack_events = defaultdict(list)
         self.route_events = defaultdict(list)
+        self.endpoint_profiles = {}
 
         self._fh = None
         self._inode = None
@@ -96,6 +135,11 @@ class WebAttackGuard:
                 return "xss", pattern.pattern
         return None, None
 
+    def _endpoint_profile(self, normalized_path):
+        if normalized_path not in self.endpoint_profiles:
+            self.endpoint_profiles[normalized_path] = EndpointProfile(self.endpoint_learning_samples)
+        return self.endpoint_profiles[normalized_path]
+
     def _prune_old(self):
         now = time.time()
         attack_cutoff = now - self.attack_window_seconds
@@ -132,6 +176,8 @@ class WebAttackGuard:
             ip, request_path, status = parsed
             normalized_path = self._normalize_path(request_path)
             now = time.time()
+            route_key = f"{ip}|{normalized_path}"
+            path_profile = self._endpoint_profile(normalized_path)
 
             attack_type, attack_pattern = self._matches_attack_pattern(request_path)
             if attack_type:
@@ -141,12 +187,21 @@ class WebAttackGuard:
                 if attack_count >= self.attack_threshold:
                     offenders.append((ip, f"web-{attack_type}-detected hits={attack_count}/{self.attack_threshold} path={normalized_path}"))
                     self.ip_attack_events[ip] = []
+                    self.route_events[route_key].append(now)
+                    path_profile.update(len(self.route_events.get(route_key, [])))
                     continue
 
-            route_key = f"{ip}|{normalized_path}"
             self.route_events[route_key].append(now)
             self._prune_old()
             route_count = len(self.route_events.get(route_key, []))
+            path_zscore = path_profile.zscore(route_count)
+            path_profile.update(route_count)
+
+            if path_profile.samples_seen >= self.endpoint_learning_samples and path_zscore >= self.endpoint_zscore_block:
+                offenders.append((ip, f"endpoint-anomaly path={normalized_path} z={path_zscore:.2f} mean={path_profile.mean:.2f} hits={route_count} weight={self.endpoint_anomaly_weight}"))
+                self.route_events[route_key] = []
+                continue
+
             if route_count >= self.rate_limit_threshold:
                 offenders.append((ip, f"web-rate-limit path={normalized_path} hits={route_count}/{self.rate_limit_threshold} window={self.rate_limit_window_seconds}s"))
                 self.route_events[route_key] = []

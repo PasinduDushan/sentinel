@@ -192,6 +192,7 @@ WEB_EVENT_PATTERNS = {
     "web_sqli": re.compile(r"web-sqli-detected", re.IGNORECASE),
     "web_xss": re.compile(r"web-xss-detected", re.IGNORECASE),
     "web_rate_limit": re.compile(r"web-rate-limit", re.IGNORECASE),
+    "web_endpoint": re.compile(r"endpoint-anomaly", re.IGNORECASE),
 }
 
 
@@ -225,7 +226,7 @@ def web_event_counts():
         for key, pattern in WEB_EVENT_PATTERNS.items():
             if pattern.search(line):
                 counts[key] += 1
-    counts["web_total"] = counts["web_blocks"] + counts["web_sqli"] + counts["web_xss"] + counts["web_rate_limit"]
+    counts["web_total"] = counts["web_blocks"] + counts["web_sqli"] + counts["web_xss"] + counts["web_rate_limit"] + counts["web_endpoint"]
     return counts
 
 
@@ -447,21 +448,6 @@ def render_dashboard(payload):
         <div class=\"value\">{html_escape(payload['service']['active'])}</div>
         <div class=\"sub\">Enabled: {html_escape(payload['service']['enabled'])}</div>
       </div>
-            <div class="card">
-                <div class="label">Web guard blocks</div>
-                <div class="value">{html_escape(web_counts.get('web_total', 0))}</div>
-                <div class="sub">SQLi + XSS + rate-limit actions</div>
-            </div>
-            <div class="card">
-                <div class="label">SQLi / XSS hits</div>
-                <div class="value">{html_escape(web_counts.get('web_sqli', 0) + web_counts.get('web_xss', 0))}</div>
-                <div class="sub">Payload pattern detections</div>
-            </div>
-            <div class="card">
-                <div class="label">Rate-limit hits</div>
-                <div class="value">{html_escape(web_counts.get('web_rate_limit', 0))}</div>
-                <div class="sub">Per-path burst defense</div>
-            </div>
       <div class=\"card\">
         <div class=\"label\">Dashboard</div>
         <div class=\"value\">{html_escape(payload['dashboard']['active'])}</div>
@@ -477,6 +463,26 @@ def render_dashboard(payload):
         <div class=\"value\">{html_escape(counts['docker_rules'])}</div>
         <div class=\"sub\">Container path enforcement</div>
       </div>
+            <div class="card">
+                <div class="label">Web guard blocks</div>
+                <div class="value">{html_escape(web_counts.get('web_total', 0))}</div>
+                <div class="sub">SQLi + XSS + rate-limit + endpoint AI</div>
+            </div>
+            <div class="card">
+                <div class="label">SQLi / XSS hits</div>
+                <div class="value">{html_escape(web_counts.get('web_sqli', 0) + web_counts.get('web_xss', 0))}</div>
+                <div class="sub">Payload pattern detections</div>
+            </div>
+            <div class="card">
+                <div class="label">Rate-limit hits</div>
+                <div class="value">{html_escape(web_counts.get('web_rate_limit', 0))}</div>
+                <div class="sub">Per-path burst defense</div>
+            </div>
+            <div class="card">
+                <div class="label">Endpoint AI hits</div>
+                <div class="value">{html_escape(web_counts.get('web_endpoint', 0))}</div>
+                <div class="sub">Path-baseline anomaly blocks</div>
+            </div>
     </div>
 
     <div class=\"layout\">
@@ -502,6 +508,7 @@ def render_dashboard(payload):
             <div class=\"config-item\"><span>Auth log path</span><strong class=\"mono\">{html_escape(cfg['SENTINEL_AUTH_LOG_PATH'])}</strong></div>
                         <div class="config-item"><span>Web guard</span><strong>{html_escape(cfg.get('SENTINEL_WEB_GUARD_ENABLED', '1'))}</strong></div>
                         <div class="config-item"><span>Web log path</span><strong class="mono">{html_escape(cfg.get('SENTINEL_WEB_LOG_PATH', cfg['SENTINEL_AUTH_LOG_PATH']))}</strong></div>
+                        <div class="config-item"><span>Web endpoint AI</span><strong class="mono">{html_escape(cfg.get('SENTINEL_WEB_ENDPOINT_LEARNING_SAMPLES', '120'))} / {html_escape(cfg.get('SENTINEL_WEB_ENDPOINT_ZSCORE_BLOCK', '3.0'))} / {html_escape(cfg.get('SENTINEL_WEB_ENDPOINT_ANOMALY_WEIGHT', '0.45'))}</strong></div>
                         <div class="config-item"><span>AI runtime</span><strong class="mono">{html_escape(ai_line)}</strong></div>
                         <div class="config-item"><span>AI learning</span><strong class="mono">{html_escape(learning_line)}</strong></div>
           </div>

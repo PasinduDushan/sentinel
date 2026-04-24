@@ -257,9 +257,18 @@ DROP counter keeps increasing:
 
 Remove Sentinel completely:
 
+    sudo sentinel-manage uninstall
+
+The command will ask for a second confirmation before clearing Sentinel iptables DROP rules.
+
+If you need to do it manually instead, these are the same cleanup steps the command performs:
+
     sudo systemctl stop sentinel.service 2>/dev/null || true
+    sudo systemctl stop sentinel-dashboard.service 2>/dev/null || true
     sudo systemctl disable sentinel.service 2>/dev/null || true
+    sudo systemctl disable sentinel-dashboard.service 2>/dev/null || true
     sudo rm -f /etc/systemd/system/sentinel.service
+    sudo rm -f /etc/systemd/system/sentinel-dashboard.service
     sudo systemctl daemon-reload
     sudo systemctl reset-failed
     sudo rm -rf /opt/sentinel
@@ -270,6 +279,7 @@ Optional firewall cleanup:
 
 1. Remove Sentinel-created DROP rules carefully.
 2. Avoid blanket flush unless you fully understand your host firewall policy.
+3. If you are on a lab box and want a full firewall reset, do it only when you are certain no other rules matter.
 
 ## 8) Daily operator checklist
 

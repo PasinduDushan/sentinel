@@ -9,6 +9,7 @@ import os
 import time
 import subprocess
 import re
+import shutil
 from collections import Counter
 
 COMMAND_FILE = "/opt/sentinel/command"
@@ -246,6 +247,93 @@ def send_command(cmd):
         sys.exit(1)
 
 
+def clear_sentinel_drop_rules():
+    """Remove Sentinel DROP rules from INPUT and DOCKER-USER chains."""
+    removed_any = False
+    for chain in ["INPUT", "DOCKER-USER"]:
+        while True:
+            rc, out, _ = run_command(["iptables", "-S", chain])
+            if rc != 0:
+                break
+
+            drop_rule = None
+            for line in out.splitlines():
+                if " -j DROP" not in line:
+                    continue
+                if " -s " not in line:
+                    continue
+                drop_rule = line.replace("-A ", "-D ", 1)
+                break
+
+            if not drop_rule:
+                break
+
+            run_command(["iptables"] + drop_rule.split())
+            removed_any = True
+
+    return removed_any
+
+
+def uninstall_sentinel():
+    """Remove Sentinel services, files, and runtime config."""
+    if os.geteuid() != 0:
+        print("Error: You need root privileges to uninstall Sentinel")
+        sys.exit(1)
+
+    print("Sentinel Uninstall")
+    print("==================")
+    print("This will remove Sentinel services, files, config, and the manager link.")
+    confirm = input("Type UNINSTALL to continue: ").strip()
+    if confirm != "UNINSTALL":
+        print("Cancelled.")
+        return
+
+    targets = [
+        "/etc/systemd/system/sentinel.service",
+        "/etc/systemd/system/sentinel-dashboard.service",
+        "/usr/local/bin/sentinel-manage",
+        "/etc/default/sentinel",
+    ]
+
+    print("Stopping services...")
+    for service in ["sentinel.service", "sentinel-dashboard.service"]:
+        run_command(["systemctl", "stop", service])
+        run_command(["systemctl", "disable", service])
+
+    print("Removing files...")
+    for path in targets:
+        try:
+            if os.path.islink(path) or os.path.isfile(path):
+                os.remove(path)
+            elif os.path.isdir(path):
+                shutil.rmtree(path)
+        except FileNotFoundError:
+            pass
+        except Exception:
+            pass
+
+    try:
+        if os.path.isdir("/opt/sentinel"):
+            shutil.rmtree("/opt/sentinel")
+    except Exception:
+        pass
+
+    clear_fw = input("Also remove Sentinel iptables DROP rules? [y/N]: ").strip().lower()
+    if clear_fw in ["y", "yes"]:
+        print("Clearing Sentinel DROP rules...")
+        if clear_sentinel_drop_rules():
+            print("Firewall rules cleared.")
+        else:
+            print("No Sentinel DROP rules found, or firewall cleanup could not be completed.")
+    else:
+        print("Keeping firewall rules in place.")
+
+    run_command(["systemctl", "daemon-reload"])
+    run_command(["systemctl", "reset-failed"])
+
+    print("Sentinel has been removed from this host.")
+
+
 def clear_status_file():
     """Remove old status file so only fresh update statuses are displayed."""
     if os.path.exists(STATUS_FILE):
@@ -301,23 +389,29 @@ def main():
         print("Commands:")
         print("  restart    - Gracefully restart the agent")
         print("  update     - Pull latest from GitHub and restart")
+        print("  uninstall  - Remove Sentinel from this host")
         print("  summary    - Show service/runtime/block summary")
         print("  status     - Alias of summary")
         print("")
         print("Examples:")
         print("  sudo ./sentinel-manage.py restart")
         print("  sudo ./sentinel-manage.py update")
+        print("  sudo ./sentinel-manage.py uninstall")
         print("  sudo ./sentinel-manage.py summary")
         sys.exit(1)
 
     cmd = sys.argv[1]
-    if cmd not in ["restart", "update", "summary", "status"]:
+    if cmd not in ["restart", "update", "uninstall", "summary", "status"]:
         print(f"Unknown command: {cmd}")
-        print("Valid commands: restart, update, summary, status")
+        print("Valid commands: restart, update, uninstall, summary, status")
         sys.exit(1)
 
     if cmd in ["summary", "status"]:
         show_summary()
+        return
+
+    if cmd == "uninstall":
+        uninstall_sentinel()
         return
 
     if cmd == "update":

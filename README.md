@@ -2,6 +2,8 @@
 
 Sentinel is a lightweight Linux DDoS protection agent that monitors inbound HTTP traffic, applies adaptive local AI scoring, and enforces firewall drops automatically.
 
+It also includes brute-force login protection plus a web-attack guard for suspicious SQL injection, XSS, and per-path burst activity.
+
 ## One-shot install
 
     curl -sSL https://raw.githubusercontent.com/PasinduDushan/sentinel/refs/heads/main/install.sh | sudo bash

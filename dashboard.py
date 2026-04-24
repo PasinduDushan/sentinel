@@ -187,6 +187,13 @@ BLOCK_EVENT_PATTERNS = [
     re.compile(r"Subnet blocked (?P<ip>\S+)", re.IGNORECASE),
 ]
 
+WEB_EVENT_PATTERNS = {
+    "web_blocks": re.compile(r"\[Web Guard\] Blocking (?P<ip>\S+): (?P<reason>.+)", re.IGNORECASE),
+    "web_sqli": re.compile(r"web-sqli-detected", re.IGNORECASE),
+    "web_xss": re.compile(r"web-xss-detected", re.IGNORECASE),
+    "web_rate_limit": re.compile(r"web-rate-limit", re.IGNORECASE),
+}
+
 
 def recent_events():
     lines = read_tail_lines(LOG_FILE, 120)
@@ -209,6 +216,17 @@ def event_counts():
                 counts[match.group("ip")] += 1
                 break
     return counts.most_common(MAX_TOP_RULES)
+
+
+def web_event_counts():
+    lines = read_tail_lines(LOG_FILE, 300)
+    counts = Counter()
+    for line in lines:
+        for key, pattern in WEB_EVENT_PATTERNS.items():
+            if pattern.search(line):
+                counts[key] += 1
+    counts["web_total"] = counts["web_blocks"] + counts["web_sqli"] + counts["web_xss"] + counts["web_rate_limit"]
+    return counts
 
 
 def extract_ai_state(lines):
@@ -236,6 +254,7 @@ def build_payload():
     log_lines = read_tail_lines(LOG_FILE, 300)
     ai_line, learning_line = extract_ai_state(log_lines)
     status_lines = read_status_lines()
+    web_counts = web_event_counts()
 
     payload = {
         "title": TITLE,
@@ -253,6 +272,7 @@ def build_payload():
         "events": recent_events(),
         "status_lines": status_lines,
         "event_counts": event_counts(),
+        "web_counts": web_counts,
         "ai_line": ai_line,
         "learning_line": learning_line,
         "log_file": LOG_FILE,
@@ -309,6 +329,7 @@ def render_table(rows, title, empty_message="No active DROP rules"):
 def render_dashboard(payload):
     cfg = payload["config"]
     counts = payload["counts"]
+    web_counts = payload.get("web_counts", {})
 
     event_counts = payload["event_counts"]
     event_html = []
@@ -426,6 +447,21 @@ def render_dashboard(payload):
         <div class=\"value\">{html_escape(payload['service']['active'])}</div>
         <div class=\"sub\">Enabled: {html_escape(payload['service']['enabled'])}</div>
       </div>
+            <div class="card">
+                <div class="label">Web guard blocks</div>
+                <div class="value">{html_escape(web_counts.get('web_total', 0))}</div>
+                <div class="sub">SQLi + XSS + rate-limit actions</div>
+            </div>
+            <div class="card">
+                <div class="label">SQLi / XSS hits</div>
+                <div class="value">{html_escape(web_counts.get('web_sqli', 0) + web_counts.get('web_xss', 0))}</div>
+                <div class="sub">Payload pattern detections</div>
+            </div>
+            <div class="card">
+                <div class="label">Rate-limit hits</div>
+                <div class="value">{html_escape(web_counts.get('web_rate_limit', 0))}</div>
+                <div class="sub">Per-path burst defense</div>
+            </div>
       <div class=\"card\">
         <div class=\"label\">Dashboard</div>
         <div class=\"value\">{html_escape(payload['dashboard']['active'])}</div>
@@ -464,6 +500,8 @@ def render_dashboard(payload):
             <div class=\"config-item\"><span>AI anomaly weight</span><strong>{html_escape(cfg['SENTINEL_AI_ANOMALY_WEIGHT'])}</strong></div>
             <div class=\"config-item\"><span>Auth guard</span><strong>{html_escape(cfg['SENTINEL_AUTH_GUARD_ENABLED'])}</strong></div>
             <div class=\"config-item\"><span>Auth log path</span><strong class=\"mono\">{html_escape(cfg['SENTINEL_AUTH_LOG_PATH'])}</strong></div>
+                        <div class="config-item"><span>Web guard</span><strong>{html_escape(cfg.get('SENTINEL_WEB_GUARD_ENABLED', '1'))}</strong></div>
+                        <div class="config-item"><span>Web log path</span><strong class="mono">{html_escape(cfg.get('SENTINEL_WEB_LOG_PATH', cfg['SENTINEL_AUTH_LOG_PATH']))}</strong></div>
                         <div class="config-item"><span>AI runtime</span><strong class="mono">{html_escape(ai_line)}</strong></div>
                         <div class="config-item"><span>AI learning</span><strong class="mono">{html_escape(learning_line)}</strong></div>
           </div>

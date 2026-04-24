@@ -11,6 +11,7 @@ import re
 from responder import block_ip, cleanup_expired_blocks
 from detector import AdaptiveRiskEngine
 from auth_guard import AuthBruteForceGuard
+from web_guard import WebAttackGuard
 
 LOG_FILE = "/opt/sentinel/logs/agent.log"
 STATUS_FILE = "/opt/sentinel/update.status"
@@ -183,6 +184,15 @@ AUTH_WINDOW_SECONDS = int(os.getenv("SENTINEL_AUTH_WINDOW_SECONDS", "300"))
 AUTH_POLL_INTERVAL = float(os.getenv("SENTINEL_AUTH_POLL_INTERVAL", "1.0"))
 last_auth_poll = time.monotonic()
 
+WEB_GUARD_ENABLED = env_bool("SENTINEL_WEB_GUARD_ENABLED", "1")
+WEB_LOG_PATH = os.getenv("SENTINEL_WEB_LOG_PATH", AUTH_LOG_PATH)
+WEB_ATTACK_THRESHOLD = int(os.getenv("SENTINEL_WEB_ATTACK_THRESHOLD", "2"))
+WEB_ATTACK_WINDOW_SECONDS = int(os.getenv("SENTINEL_WEB_ATTACK_WINDOW_SECONDS", "300"))
+WEB_RATE_LIMIT_THRESHOLD = int(os.getenv("SENTINEL_WEB_RATE_LIMIT_THRESHOLD", "120"))
+WEB_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("SENTINEL_WEB_RATE_LIMIT_WINDOW_SECONDS", "60"))
+WEB_POLL_INTERVAL = float(os.getenv("SENTINEL_WEB_POLL_INTERVAL", "1.0"))
+last_web_poll = time.monotonic()
+
 risk_engine = AdaptiveRiskEngine(
     enabled=AI_ENABLED,
     learning_samples=AI_LEARNING_SAMPLES,
@@ -202,6 +212,15 @@ auth_guard = AuthBruteForceGuard(
     window_seconds=AUTH_WINDOW_SECONDS,
 )
 
+web_guard = WebAttackGuard(
+    log_path=WEB_LOG_PATH,
+    enabled=WEB_GUARD_ENABLED,
+    attack_threshold=WEB_ATTACK_THRESHOLD,
+    attack_window_seconds=WEB_ATTACK_WINDOW_SECONDS,
+    rate_limit_threshold=WEB_RATE_LIMIT_THRESHOLD,
+    rate_limit_window_seconds=WEB_RATE_LIMIT_WINDOW_SECONDS,
+)
+
 log_event(
     f"[Sentinel] AI mode={'enabled' if AI_ENABLED else 'disabled'} "
     f"learning_samples={AI_LEARNING_SAMPLES} min_block_score={AI_MIN_BLOCK_SCORE}"
@@ -209,6 +228,10 @@ log_event(
 log_event(
     f"[Sentinel] Auth guard={'enabled' if AUTH_GUARD_ENABLED else 'disabled'} "
     f"log={AUTH_LOG_PATH} ip_threshold={AUTH_IP_FAIL_THRESHOLD} window={AUTH_WINDOW_SECONDS}s"
+)
+log_event(
+    f"[Sentinel] Web guard={'enabled' if WEB_GUARD_ENABLED else 'disabled'} "
+    f"log={WEB_LOG_PATH} attack_threshold={WEB_ATTACK_THRESHOLD} rate_limit={WEB_RATE_LIMIT_THRESHOLD}/{WEB_RATE_LIMIT_WINDOW_SECONDS}s"
 )
 
 def extract_ip(part):
@@ -244,6 +267,13 @@ while True:
             log_event(f"[Auth Guard] Blocking {offender_ip}: {reason}")
             block_ip(offender_ip)
         last_auth_poll = now_monotonic
+
+    if WEB_GUARD_ENABLED and now_monotonic - last_web_poll >= WEB_POLL_INTERVAL:
+        offenders = web_guard.poll()
+        for offender_ip, reason in offenders:
+            log_event(f"[Web Guard] Blocking {offender_ip}: {reason}")
+            block_ip(offender_ip)
+        last_web_poll = now_monotonic
 
     # Non-blocking wait for tcpdump output so command handling is never starved.
     readable, _, _ = select.select([proc.stdout], [], [], 0.1)

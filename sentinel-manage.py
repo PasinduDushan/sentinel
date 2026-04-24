@@ -8,10 +8,13 @@ import sys
 import os
 import time
 import subprocess
+import re
+from collections import Counter
 
 COMMAND_FILE = "/opt/sentinel/command"
 STATUS_FILE = "/opt/sentinel/update.status"
 DEFAULT_CONFIG_FILE = "/etc/default/sentinel"
+LOG_FILE = "/opt/sentinel/logs/agent.log"
 
 def run_command(cmd):
     """Run shell command and return (rc, stdout, stderr)."""
@@ -79,6 +82,31 @@ def count_drop_rules(chain):
             count += 1
     return count
 
+WEB_EVENT_PATTERNS = {
+    "web_blocks": re.compile(r"\[Web Guard\] Blocking (?P<ip>\S+): (?P<reason>.+)", re.IGNORECASE),
+    "web_sqli": re.compile(r"web-sqli-detected", re.IGNORECASE),
+    "web_xss": re.compile(r"web-xss-detected", re.IGNORECASE),
+    "web_rate_limit": re.compile(r"web-rate-limit", re.IGNORECASE),
+}
+
+
+def count_log_events(patterns, limit=300):
+    if not os.path.exists(LOG_FILE):
+        return Counter()
+
+    try:
+        with open(LOG_FILE, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()[-limit:]
+    except Exception:
+        return Counter()
+
+    counts = Counter()
+    for line in lines:
+        for key, pattern in patterns.items():
+            if pattern.search(line):
+                counts[key] += 1
+    return counts
+
 def show_summary():
     """Print one-shot Sentinel status summary."""
     print("Sentinel Summary")
@@ -122,6 +150,10 @@ def show_summary():
     print(f"Auth User thres. : {config['SENTINEL_AUTH_USER_FAIL_THRESHOLD']}")
     print(f"Auth window (sec): {config['SENTINEL_AUTH_WINDOW_SECONDS']}")
     print(f"Auth poll (sec)  : {config['SENTINEL_AUTH_POLL_INTERVAL']}")
+    print(f"Web guard        : {config.get('SENTINEL_WEB_GUARD_ENABLED', '1')}")
+    print(f"Web log path     : {config.get('SENTINEL_WEB_LOG_PATH', config['SENTINEL_AUTH_LOG_PATH'])}")
+    print(f"Web attack thres.: {config.get('SENTINEL_WEB_ATTACK_THRESHOLD', '2')}")
+    print(f"Web rate limit   : {config.get('SENTINEL_WEB_RATE_LIMIT_THRESHOLD', '120')}/{config.get('SENTINEL_WEB_RATE_LIMIT_WINDOW_SECONDS', '60')}s")
     print(f"Dashboard bind   : {config.get('SENTINEL_DASHBOARD_BIND', '127.0.0.1')}")
     print(f"Dashboard port   : {config.get('SENTINEL_DASHBOARD_PORT', '8088')}")
     print(f"Dashboard title  : {config.get('SENTINEL_DASHBOARD_TITLE', 'Sentinel Dashboard')}")
@@ -134,12 +166,17 @@ def show_summary():
 
     input_drop_count = count_drop_rules("INPUT")
     docker_drop_count = count_drop_rules("DOCKER-USER")
+    web_counts = count_log_events(WEB_EVENT_PATTERNS)
 
     input_text = str(input_drop_count) if input_drop_count is not None else "n/a"
     docker_text = str(docker_drop_count) if docker_drop_count is not None else "n/a"
+    web_total = web_counts.get("web_blocks", 0) + web_counts.get("web_sqli", 0) + web_counts.get("web_xss", 0) + web_counts.get("web_rate_limit", 0)
 
     print(f"INPUT DROP rules : {input_text}")
     print(f"DOCKER-USER DROP : {docker_text}")
+    print(f"Web guard total  : {web_total}")
+    print(f"Web SQLi/XSS     : {web_counts.get('web_sqli', 0) + web_counts.get('web_xss', 0)}")
+    print(f"Web rate limit   : {web_counts.get('web_rate_limit', 0)}")
     print("Logs             : /opt/sentinel/logs/agent.log")
 
 def send_command(cmd):
